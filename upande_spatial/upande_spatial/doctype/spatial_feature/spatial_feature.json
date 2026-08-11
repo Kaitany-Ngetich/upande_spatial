@@ -1,0 +1,178 @@
+{
+ "actions": [],
+ "autoname": "format:SPF-{#####}",
+ "creation": "2026-08-11 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "geometry_type",
+  "column_break_1",
+  "farm",
+  "company",
+  "section_break_1",
+  "reference_doctype",
+  "reference_name",
+  "source_module",
+  "column_break_2",
+  "area_sq_m",
+  "length_m",
+  "section_break_2",
+  "geometry",
+  "section_break_3",
+  "properties",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "in_list_view": 1,
+   "description": "Human-readable label — e.g. \"Kapkolia Boundary\" or \"Patrol Zone 3\". Not required; falls back to the record name."
+  },
+  {
+   "fieldname": "geometry_type",
+   "fieldtype": "Select",
+   "label": "Geometry Type",
+   "options": "Point\nLineString\nPolygon\nMultiPoint\nMultiLineString\nMultiPolygon",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "description": "Derived automatically from the geometry on save — not set by hand."
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "farm",
+   "fieldtype": "Link",
+   "label": "Farm",
+   "options": "Farm",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Which farm this feature belongs to, if any. Independent of Reference Doctype/Name below — a patrol zone owned by Upande Security can still be tagged to a farm here for cross-module filtering."
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break",
+   "label": "Ownership"
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "label": "Reference Doctype",
+   "options": "DocType",
+   "in_standard_filter": 1,
+   "description": "The record this geometry actually belongs to — e.g. Farm, or a Security patrol block. Optional: a feature can exist with no specific owning record."
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Name",
+   "options": "reference_doctype"
+  },
+  {
+   "fieldname": "source_module",
+   "fieldtype": "Data",
+   "label": "Source Module",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Which app/module created this feature — e.g. \"Upande Security\". Free text, set by the creating module's API call, purely for provenance/filtering."
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "area_sq_m",
+   "fieldtype": "Float",
+   "label": "Area (sq. m)",
+   "read_only": 1,
+   "precision": "2",
+   "description": "Auto-computed on save for Polygon/MultiPolygon geometry using an equirectangular approximation centered on the feature — accurate for farm-sized areas, not meant for continental-scale geometry."
+  },
+  {
+   "fieldname": "length_m",
+   "fieldtype": "Float",
+   "label": "Length (m)",
+   "read_only": 1,
+   "precision": "2",
+   "description": "Auto-computed on save for LineString/MultiLineString geometry (sum of haversine segment distances)."
+  },
+  {
+   "fieldname": "section_break_2",
+   "fieldtype": "Section Break",
+   "label": "Geometry"
+  },
+  {
+   "fieldname": "geometry",
+   "fieldtype": "Geolocation",
+   "label": "Geometry",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_3",
+   "fieldtype": "Section Break",
+   "label": "Metadata",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "properties",
+   "fieldtype": "Code",
+   "label": "Properties (JSON)",
+   "options": "JSON",
+   "description": "Arbitrary key/value metadata specific to the source module — e.g. block name, crop type, category — without needing a schema change here for every new consumer."
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Upande Spatial",
+ "name": "Spatial Feature",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "All",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
