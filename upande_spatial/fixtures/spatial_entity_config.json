@@ -30,15 +30,15 @@
  {
   "allowed_geometries": [
    {
-    "feature_role": "Last Seen",
-    "geometry_type": "Point"
+    "feature_role": "Boundary",
+    "geometry_type": "Polygon"
    }
   ],
-  "description": null,
+  "description": "Farm Block boundary - Farm Block itself carries no geometry field, the boundary is stored externally as a Spatial Feature keyed to it.",
   "docstatus": 0,
   "doctype": "Spatial Entity Config",
-  "modified": "2026-08-21 15:38:19.109654",
-  "name": "Guard Device Token",
-  "reference_doctype": "Guard Device Token"
+  "modified": "2026-08-21 15:59:12.787564",
+  "name": "Farm Block",
+  "reference_doctype": "Farm Block"
  }
 ]
