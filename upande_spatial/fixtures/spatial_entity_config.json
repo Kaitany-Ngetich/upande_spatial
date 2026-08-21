@@ -1,0 +1,44 @@
+[
+ {
+  "allowed_geometries": [
+   {
+    "feature_role": "Boundary",
+    "geometry_type": "Polygon"
+   }
+  ],
+  "description": null,
+  "docstatus": 0,
+  "doctype": "Spatial Entity Config",
+  "modified": "2026-08-21 15:38:18.990749",
+  "name": "Farm",
+  "reference_doctype": "Farm"
+ },
+ {
+  "allowed_geometries": [
+   {
+    "feature_role": "Location",
+    "geometry_type": "Point"
+   }
+  ],
+  "description": null,
+  "docstatus": 0,
+  "doctype": "Spatial Entity Config",
+  "modified": "2026-08-21 15:38:19.085359",
+  "name": "Warehouse",
+  "reference_doctype": "Warehouse"
+ },
+ {
+  "allowed_geometries": [
+   {
+    "feature_role": "Last Seen",
+    "geometry_type": "Point"
+   }
+  ],
+  "description": null,
+  "docstatus": 0,
+  "doctype": "Spatial Entity Config",
+  "modified": "2026-08-21 15:38:19.109654",
+  "name": "Guard Device Token",
+  "reference_doctype": "Guard Device Token"
+ }
+]

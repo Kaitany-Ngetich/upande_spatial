@@ -1,0 +1,40 @@
+{
+ "actions": [],
+ "creation": "2026-08-19 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "geometry_type",
+  "feature_role"
+ ],
+ "fields": [
+  {
+   "fieldname": "geometry_type",
+   "fieldtype": "Select",
+   "label": "Geometry Type",
+   "options": "Point\nLineString\nPolygon\nMultiPoint\nMultiLineString\nMultiPolygon",
+   "in_list_view": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "feature_role",
+   "fieldtype": "Data",
+   "label": "Feature Role",
+   "in_list_view": 1,
+   "description": "Leave blank to allow this geometry type under any role."
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-19 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Upande Spatial",
+ "name": "Spatial Entity Allowed Geometry",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -251,6 +251,33 @@ app_license = "mit"
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
+# Fixtures
+# --------
+# Data-level records this app depends on that must survive a fresh deploy -
+# same lesson learned the hard way on upande_security: a Workspace (or any
+# data record) that only exists in this bench's database, with nothing
+# exported/fixture-tracked, silently vanishes on a fresh site install.
+fixtures = [
+	{
+		# The workspace shell (left-sidebar entry in Desk). Also exported as
+		# its own module JSON (upande_spatial/workspace/upande_spatial/) since
+		# developer_mode picked it up automatically - this fixture is
+		# deliberate belt-and-suspenders, not the only thing keeping it alive.
+		"dt": "Workspace",
+		"filters": [
+			["name", "=", "Upande Spatial"],
+		],
+	},
+	{
+		# Which (geometry type, feature role) combinations are valid per
+		# doctype - Farm/Warehouse/Guard Device Token configs set up so far.
+		# New doctypes get added here as more modules adopt Spatial Feature;
+		# a doctype with no config row here is simply unrestricted, so this
+		# list only ever needs entries for doctypes that ARE configured.
+		"dt": "Spatial Entity Config",
+	},
+]
+
 # Translation
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
