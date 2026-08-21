@@ -40,5 +40,19 @@
   "modified": "2026-08-21 15:59:12.787564",
   "name": "Farm Block",
   "reference_doctype": "Farm Block"
+ },
+ {
+  "allowed_geometries": [
+   {
+    "feature_role": "Location",
+    "geometry_type": "Point"
+   }
+  ],
+  "description": "Irrigation infrastructure (tanks/valves) - Tank And Valve already carries its own location_geojson field, this config just registers it in the central catalog so it's discoverable alongside every other spatial asset.",
+  "docstatus": 0,
+  "doctype": "Spatial Entity Config",
+  "modified": "2026-08-21 16:13:40.507882",
+  "name": "Tank And Valve",
+  "reference_doctype": "Tank And Valve"
  }
 ]
