@@ -54,5 +54,23 @@
   "modified": "2026-08-21 16:13:40.507882",
   "name": "Tank And Valve",
   "reference_doctype": "Tank And Valve"
+ },
+ {
+  "allowed_geometries": [
+   {
+    "feature_role": "Location",
+    "geometry_type": "Point"
+   },
+   {
+    "feature_role": "Boundary",
+    "geometry_type": "Polygon"
+   }
+  ],
+  "description": "Core ERPNext Location (Assets module) - tree-structured land/plot records. Location already carries its own Geolocation field; this config registers it in the central catalog too, same pattern as Farm and Tank And Valve, so it's queryable alongside every other spatial asset rather than only reachable through its own doctype.",
+  "docstatus": 0,
+  "doctype": "Spatial Entity Config",
+  "modified": "2026-08-21 16:16:10.927100",
+  "name": "Location",
+  "reference_doctype": "Location"
  }
 ]
