@@ -276,6 +276,18 @@ fixtures = [
 		# list only ever needs entries for doctypes that ARE configured.
 		"dt": "Spatial Entity Config",
 	},
+	{
+		# Spatial Studio — the full-bleed Leaflet dashboard (layers, query,
+		# draw/edit, import/export, spatial analysis, sharing) built as a
+		# single Web Page with no build step, same pattern as
+		# upande_security's patrol-map/security-dashboard Web Pages. Filtered
+		# by route, not swept up by `dt`, so a fresh site install never
+		# ships every other app's public Web Pages under this app's name.
+		"dt": "Web Page",
+		"filters": [
+			["route", "=", "spatial-studio"],
+		],
+	},
 ]
 
 # Translation
