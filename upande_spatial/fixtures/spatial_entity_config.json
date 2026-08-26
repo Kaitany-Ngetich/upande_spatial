@@ -3,7 +3,9 @@
   "allowed_geometries": [
    {
     "feature_role": "Boundary",
-    "geometry_type": "Polygon"
+    "geometry_type": "Polygon",
+    "layer_name": "Farm Boundary",
+    "color": "#3B6D11"
    }
   ],
   "description": null,
@@ -17,7 +19,10 @@
   "allowed_geometries": [
    {
     "feature_role": "Location",
-    "geometry_type": "Point"
+    "geometry_type": "Point",
+    "layer_name": "Warehouse",
+    "color": "#854F0B",
+    "marker_icon": "warehouse"
    }
   ],
   "description": null,
@@ -31,7 +36,9 @@
   "allowed_geometries": [
    {
     "feature_role": "Boundary",
-    "geometry_type": "Polygon"
+    "geometry_type": "Polygon",
+    "layer_name": "Farm Blocks",
+    "color": "#185FA5"
    }
   ],
   "description": "Farm Block boundary - Farm Block itself carries no geometry field, the boundary is stored externally as a Spatial Feature keyed to it.",
@@ -45,7 +52,10 @@
   "allowed_geometries": [
    {
     "feature_role": "Location",
-    "geometry_type": "Point"
+    "geometry_type": "Point",
+    "layer_name": "Water Pump",
+    "color": "#228883",
+    "marker_icon": "faucet-drip"
    }
   ],
   "description": "Irrigation infrastructure (tanks/valves) - Tank And Valve already carries its own location_geojson field, this config just registers it in the central catalog so it's discoverable alongside every other spatial asset.",
@@ -59,11 +69,16 @@
   "allowed_geometries": [
    {
     "feature_role": "Location",
-    "geometry_type": "Point"
+    "geometry_type": "Point",
+    "layer_name": "Site",
+    "color": "#534AB7",
+    "marker_icon": "location-dot"
    },
    {
     "feature_role": "Boundary",
-    "geometry_type": "Polygon"
+    "geometry_type": "Polygon",
+    "layer_name": "Site Boundary",
+    "color": "#534AB7"
    }
   ],
   "description": "Core ERPNext Location (Assets module) - tree-structured land/plot records. Location already carries its own Geolocation field; this config registers it in the central catalog too, same pattern as Farm and Tank And Valve, so it's queryable alongside every other spatial asset rather than only reachable through its own doctype.",

@@ -82,6 +82,39 @@ def _validate_against_config(reference_doctype, feature_role, geometry_type):
 	)
 
 
+def _resolve_layer_name(reference_doctype, feature_role, geometry_type):
+	"""Look up the map "layer" a feature belongs to, from the same
+	Spatial Entity Config / Spatial Entity Allowed Geometry row that
+	_validate_against_config above matches on (reference_doctype +
+	geometry_type + feature_role, blank feature_role on the config row
+	meaning "any role"). Returns a (layer_name, color, marker_icon) tuple.
+
+	Falls back to (reference_doctype, None, None) — or ("Uncategorized",
+	None, None) when there's no reference_doctype at all — whenever there's
+	no Spatial Entity Config row for this doctype, no matching
+	allowed_geometries row, or the matching row exists but its layer_name is
+	blank (a combo that's allowed but not assigned to a specific layer)."""
+	fallback = (reference_doctype or _("Uncategorized"), None, None)
+	if not reference_doctype:
+		return fallback
+	if not frappe.db.exists("Spatial Entity Config", reference_doctype):
+		return fallback
+
+	config = frappe.get_cached_doc("Spatial Entity Config", reference_doctype)
+	if not config.allowed_geometries:
+		return fallback
+
+	role = feature_role or DEFAULT_ROLE
+	for row in config.allowed_geometries:
+		role_matches = (not row.feature_role) or row.feature_role == role
+		if row.geometry_type == geometry_type and role_matches:
+			if row.layer_name:
+				return (row.layer_name, row.color, row.marker_icon)
+			return fallback
+
+	return fallback
+
+
 @frappe.whitelist()
 def upsert_feature(
 	geometry,
@@ -141,6 +174,9 @@ def upsert_feature(
 	if properties is not None:
 		doc.properties = properties
 
+	layer_name, _color, _marker_icon = _resolve_layer_name(reference_doctype, feature_role, geometry_type)
+	doc.layer = layer_name
+
 	# No ignore_permissions here on purpose - a caller authenticating as a
 	# real Frappe user (their own API key, not a shared/admin one) should
 	# get exactly that user's actual Spatial Feature permissions, same as
@@ -155,6 +191,7 @@ def upsert_feature(
 		"feature_role": doc.feature_role,
 		"area_sq_m": doc.area_sq_m,
 		"length_m": doc.length_m,
+		"layer": doc.layer,
 	}
 
 
@@ -229,7 +266,7 @@ def list_features(
 		filters=filters,
 		fields=[
 			"name", "title", "geometry_type", "feature_role", "farm", "company",
-			"reference_doctype", "reference_name", "source_module",
+			"reference_doctype", "reference_name", "source_module", "layer",
 			"area_sq_m", "length_m",
 		],
 		limit_page_length=int(limit) if limit else 500,
@@ -258,7 +295,7 @@ def get_features_geojson(farm=None, reference_doctype=None, feature_role=None, s
 		"Spatial Feature",
 		filters=filters,
 		fields=[
-			"name", "title", "geometry", "farm", "feature_role",
+			"name", "title", "geometry", "farm", "feature_role", "geometry_type", "layer",
 			"reference_doctype", "reference_name", "properties",
 		],
 		limit_page_length=0,
@@ -272,6 +309,9 @@ def get_features_geojson(farm=None, reference_doctype=None, feature_role=None, s
 			parsed = json.loads(r.geometry)
 		except Exception:
 			continue
+		_layer_name, color, marker_icon = _resolve_layer_name(
+			r.reference_doctype, r.feature_role, r.geometry_type
+		)
 		for f in parsed.get("features", []):
 			f.setdefault("properties", {})
 			f["properties"]["_spatial_feature_name"] = r.name
@@ -280,6 +320,9 @@ def get_features_geojson(farm=None, reference_doctype=None, feature_role=None, s
 			f["properties"]["_feature_role"] = r.feature_role
 			f["properties"]["_reference_doctype"] = r.reference_doctype
 			f["properties"]["_reference_name"] = r.reference_name
+			f["properties"]["_layer"] = r.layer
+			f["properties"]["color"] = color
+			f["properties"]["marker_icon"] = marker_icon
 			features.append(f)
 
 	return {"type": "FeatureCollection", "features": features}
@@ -310,3 +353,194 @@ def delete_feature(reference_doctype=None, reference_name=None, feature_role=Non
 	frappe.delete_doc("Spatial Feature", name)
 	frappe.db.commit()
 	return {"deleted": True, "name": name}
+
+
+# --- Dashboard-facing helpers ---------------------------------------------
+#
+# The functions below don't fetch/write geometry themselves — they answer
+# the "what's out there" questions a dashboard needs before it can even
+# draw a map: which ERP doctypes actually have spatial data, how many
+# features per layer/geometry type, and what layers exist at all (whether
+# or not they're formally configured on a Spatial Entity Config yet).
+
+@frappe.whitelist()
+def get_referenced_doctypes():
+	"""Which ERP doctypes actually have Spatial Feature records, with
+	counts, permission-filtered. A Spatial Feature's own read permission is
+	broad (see its doctype's "All" role), but that doesn't mean every user
+	may read whatever it references (e.g. an HR-only doctype) — so each
+	distinct reference_doctype is checked against the calling user's actual
+	read permission on THAT doctype before being included."""
+	rows = frappe.get_all(
+		"Spatial Feature",
+		filters={"reference_doctype": ("is", "set")},
+		# Dict syntax required here — this frappe version's query builder
+		# rejects "count(name) as x" as a raw SQL-function string in fields.
+		fields=["reference_doctype as doctype", {"COUNT": "name", "as": "feature_count"}],
+		group_by="reference_doctype",
+		order_by="feature_count desc",
+	)
+	return [
+		r for r in rows
+		if frappe.db.exists("DocType", r.doctype) and frappe.has_permission(r.doctype, "read")
+	]
+
+
+@frappe.whitelist()
+def get_feature_summary(farm=None, layer=None):
+	"""Counts grouped by layer and by geometry_type (two breakdowns in one
+	call), plus a grand total — the numbers behind a dashboard's summary
+	cards/legend. Filterable by farm and/or layer so a farm-scoped or
+	layer-scoped dashboard view gets its own summary rather than the global
+	one."""
+	filters = {}
+	if farm:
+		filters["farm"] = farm
+	if layer:
+		filters["layer"] = layer
+
+	by_layer = frappe.get_all(
+		"Spatial Feature", filters=filters, fields=["layer", {"COUNT": "name", "as": "n"}],
+		group_by="layer", order_by="n desc",
+	)
+	by_type = frappe.get_all(
+		"Spatial Feature", filters=filters, fields=["geometry_type", {"COUNT": "name", "as": "n"}],
+		group_by="geometry_type", order_by="n desc",
+	)
+	total = frappe.db.count("Spatial Feature", filters)
+	return {"total": total, "by_layer": by_layer, "by_geometry_type": by_type}
+
+
+@frappe.whitelist()
+def get_layers():
+	"""The distinct set of browsable map layers: every configured layer
+	(a Spatial Entity Allowed Geometry row with a non-blank layer_name,
+	deduped by layer_name, carrying its color/marker_icon) PLUS any `layer`
+	value actually present on real Spatial Feature records that isn't
+	already in that configured set — features saved before layer_name
+	existed, or under a reference_doctype with no Spatial Entity Config row
+	at all, still need to show up as a browsable layer, just without custom
+	styling.
+
+	When two config rows (on different reference_doctypes) use the same
+	layer_name with different color/marker_icon, one is picked
+	deterministically: the alphabetically-first reference_doctype for that
+	layer_name wins (see ORDER BY below) — arbitrary, but stable, and a
+	dashboard is free to override styling per-doctype itself if that ever
+	matters."""
+	configured = frappe.db.sql(
+		"""
+		SELECT g.layer_name AS layer_name, g.color AS color, g.marker_icon AS marker_icon
+		FROM `tabSpatial Entity Allowed Geometry` g
+		WHERE g.layer_name IS NOT NULL AND g.layer_name != ''
+		ORDER BY g.layer_name ASC, g.parent ASC
+		""",
+		as_dict=True,
+	)
+
+	by_name = {}
+	for row in configured:
+		if row.layer_name not in by_name:
+			by_name[row.layer_name] = {
+				"layer_name": row.layer_name,
+				"color": row.color,
+				"marker_icon": row.marker_icon,
+				"configured": True,
+			}
+
+	feature_layers = frappe.get_all(
+		"Spatial Feature",
+		filters={"layer": ("is", "set")},
+		fields=["layer"],
+		group_by="layer",
+	)
+	for row in feature_layers:
+		if row.layer and row.layer not in by_name:
+			by_name[row.layer] = {
+				"layer_name": row.layer,
+				"color": None,
+				"marker_icon": None,
+				"configured": False,
+			}
+
+	return sorted(by_name.values(), key=lambda r: r["layer_name"])
+
+
+# Property keys get_features_geojson prefixes with "_" purely for
+# round-tripping ownership back through import_features below — these
+# aren't real feature metadata, so they're stripped back out before
+# whatever's left gets saved as a feature's own `properties` JSON again.
+_ROUNDTRIP_PROPERTY_KEYS = {
+	"_spatial_feature_name", "_title", "_farm", "_company",
+	"_feature_role", "_reference_doctype", "_reference_name", "_layer",
+	"color", "marker_icon",
+}
+
+
+@frappe.whitelist()
+def import_features(
+	features,
+	default_reference_doctype=None,
+	default_farm=None,
+	default_company=None,
+	source_module=None,
+):
+	"""Batch import GeoJSON Features via upsert_feature (reused, not
+	duplicated) — accepts a JSON string or already-parsed list/dict, and
+	either a bare list of Features or a whole FeatureCollection.
+
+	For each feature, reference_doctype/reference_name/feature_role/farm/
+	company/title are read off the Feature's own `properties` first — the
+	exact _reference_doctype/_reference_name/_feature_role/_farm/_title
+	(and _company) keys get_features_geojson already writes — falling back
+	to this call's default_* args when a property is absent. That means an
+	export (get_features_geojson) → reimport (this function) round-trip
+	preserves ownership with no extra mapping required by the caller.
+
+	One bad feature never aborts the batch: each feature's upsert runs in
+	its own try/except, logged via frappe.log_error and skipped, same
+	soft-fail spirit as upande_security's gate_dispatch.py. Returns
+	{"imported": n, "failed": [{"index": i, "error": "..."}, ...]}."""
+	if isinstance(features, str):
+		features = json.loads(features)
+
+	if isinstance(features, dict) and features.get("type") == "FeatureCollection":
+		feature_list = features.get("features") or []
+	elif isinstance(features, dict) and features.get("type") == "Feature":
+		feature_list = [features]
+	elif isinstance(features, list):
+		feature_list = features
+	else:
+		frappe.throw(_("features must be a GeoJSON Feature, a FeatureCollection, or a list of Features."))
+
+	imported = 0
+	failed = []
+
+	for i, feat in enumerate(feature_list):
+		try:
+			if not isinstance(feat, dict):
+				raise ValueError("Not a GeoJSON Feature object.")
+			geometry = feat.get("geometry")
+			if not geometry:
+				raise ValueError("Feature has no geometry.")
+
+			props = feat.get("properties") or {}
+			extra_properties = {k: v for k, v in props.items() if k not in _ROUNDTRIP_PROPERTY_KEYS}
+
+			upsert_feature(
+				geometry=geometry,
+				reference_doctype=props.get("_reference_doctype") or default_reference_doctype,
+				reference_name=props.get("_reference_name"),
+				feature_role=props.get("_feature_role"),
+				farm=props.get("_farm") or default_farm,
+				company=props.get("_company") or default_company,
+				source_module=source_module,
+				title=props.get("_title"),
+				properties=extra_properties or None,
+			)
+			imported += 1
+		except Exception as e:
+			frappe.log_error("Spatial import_features", f"index {i}: {e}")
+			failed.append({"index": i, "error": str(e)})
+
+	return {"imported": imported, "failed": failed}
