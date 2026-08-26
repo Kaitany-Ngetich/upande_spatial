@@ -1,0 +1,62 @@
+[
+ {
+  "app": "upande_spatial",
+  "charts": [],
+  "content": "[\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h4\\\"><b>Upande Spatial</b></span>\"\n  },\n  \"id\": \"header\",\n  \"type\": \"header\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"Shared spatial data module \\u2014 one place for geometry (points/lines/polygons) referenced by other doctypes (Farm, Warehouse, Guard Device Token, ...) rather than each module storing its own.\"\n  },\n  \"id\": \"para\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"Shortcuts\"\n  },\n  \"id\": \"shortcuts_header\",\n  \"type\": \"header\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Spatial Feature\"\n  },\n  \"id\": \"shortcuts\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Spatial Entity Config\"\n  },\n  \"id\": \"shortcuts2\",\n  \"type\": \"shortcut\"\n }\n]",
+  "custom_blocks": [],
+  "docstatus": 0,
+  "doctype": "Workspace",
+  "external_link": null,
+  "for_user": "",
+  "hide_custom": 0,
+  "icon": null,
+  "indicator_color": "green",
+  "is_hidden": 0,
+  "label": "Upande Spatial",
+  "link_to": null,
+  "link_type": "DocType",
+  "links": [],
+  "modified": "2026-08-21 15:40:56.292940",
+  "module": "Upande Spatial",
+  "name": "Upande Spatial",
+  "number_cards": [],
+  "parent_page": "",
+  "public": 1,
+  "quick_lists": [],
+  "restrict_to_domain": null,
+  "roles": [],
+  "sequence_id": 1.0,
+  "shortcuts": [
+   {
+    "color": null,
+    "doc_view": "List",
+    "format": null,
+    "icon": null,
+    "kanban_board": null,
+    "label": "Spatial Feature",
+    "link_to": "Spatial Feature",
+    "report_ref_doctype": null,
+    "restrict_to_domain": null,
+    "stats_filter": null,
+    "type": "DocType",
+    "url": null
+   },
+   {
+    "color": null,
+    "doc_view": "List",
+    "format": null,
+    "icon": null,
+    "kanban_board": null,
+    "label": "Spatial Entity Config",
+    "link_to": "Spatial Entity Config",
+    "report_ref_doctype": null,
+    "restrict_to_domain": null,
+    "stats_filter": null,
+    "type": "DocType",
+    "url": null
+   }
+  ],
+  "title": "Upande Spatial",
+  "type": "Workspace"
+ }
+]

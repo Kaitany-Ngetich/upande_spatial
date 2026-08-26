@@ -1,0 +1,197 @@
+{
+ "actions": [],
+ "autoname": "format:SPF-{#####}",
+ "creation": "2026-08-11 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "geometry_type",
+  "column_break_1",
+  "farm",
+  "company",
+  "section_break_1",
+  "reference_doctype",
+  "reference_name",
+  "feature_role",
+  "source_module",
+  "layer",
+  "column_break_2",
+  "area_sq_m",
+  "length_m",
+  "section_break_2",
+  "geometry",
+  "section_break_3",
+  "properties",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "in_list_view": 1,
+   "description": "Human-readable label \u2014 e.g. \"Kapkolia Boundary\" or \"Patrol Zone 3\". Not required; falls back to the record name."
+  },
+  {
+   "fieldname": "geometry_type",
+   "fieldtype": "Select",
+   "label": "Geometry Type",
+   "options": "Point\nLineString\nPolygon\nMultiPoint\nMultiLineString\nMultiPolygon",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "description": "Derived automatically from the geometry on save \u2014 not set by hand."
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "farm",
+   "fieldtype": "Link",
+   "label": "Farm",
+   "options": "Farm",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Which farm this feature belongs to, if any. Independent of Reference Doctype/Name below \u2014 a patrol zone owned by Upande Security can still be tagged to a farm here for cross-module filtering."
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break",
+   "label": "Ownership"
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "label": "Reference Doctype",
+   "options": "DocType",
+   "in_standard_filter": 1,
+   "description": "The record this geometry actually belongs to \u2014 e.g. Farm, or a Security patrol block. Optional: a feature can exist with no specific owning record."
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Name",
+   "options": "reference_doctype"
+  },
+  {
+   "fieldname": "feature_role",
+   "fieldtype": "Data",
+   "label": "Feature Role",
+   "description": "What this geometry represents for the referenced record - e.g. Location, Footprint, Alignment, Boundary, Access Road. Lets one record (a Farm, an Asset, ...) have more than one spatial feature at once (e.g. a boundary polygon AND a gate point), each distinguished by role rather than overwriting each other. Free text on purpose - the vocabulary is domain-specific and keeps growing; Spatial Entity Config can restrict it per doctype without needing a doctype migration every time a new role shows up.",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "source_module",
+   "fieldtype": "Data",
+   "label": "Source Module",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Which app/module created this feature \u2014 e.g. \"Upande Security\". Free text, set by the creating module's API call, purely for provenance/filtering."
+  },
+  {
+   "fieldname": "layer",
+   "fieldtype": "Data",
+   "label": "Layer",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Map layer this feature belongs to \u2014 auto-populated on upsert from the matching Spatial Entity Allowed Geometry row's Layer Name (matched on reference_doctype + geometry_type + feature_role), falling back to the reference doctype name or \"Uncategorized\". Not set by hand."
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "area_sq_m",
+   "fieldtype": "Float",
+   "label": "Area (sq. m)",
+   "read_only": 1,
+   "precision": "2",
+   "description": "Auto-computed on save for Polygon/MultiPolygon geometry using an equirectangular approximation centered on the feature \u2014 accurate for farm-sized areas, not meant for continental-scale geometry."
+  },
+  {
+   "fieldname": "length_m",
+   "fieldtype": "Float",
+   "label": "Length (m)",
+   "read_only": 1,
+   "precision": "2",
+   "description": "Auto-computed on save for LineString/MultiLineString geometry (sum of haversine segment distances)."
+  },
+  {
+   "fieldname": "section_break_2",
+   "fieldtype": "Section Break",
+   "label": "Geometry"
+  },
+  {
+   "fieldname": "geometry",
+   "fieldtype": "Geolocation",
+   "label": "Geometry",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_3",
+   "fieldtype": "Section Break",
+   "label": "Metadata",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "properties",
+   "fieldtype": "Code",
+   "label": "Properties (JSON)",
+   "options": "JSON",
+   "description": "Arbitrary key/value metadata specific to the source module \u2014 e.g. block name, crop type, category \u2014 without needing a schema change here for every new consumer."
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-26 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Upande Spatial",
+ "name": "Spatial Feature",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "All",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
