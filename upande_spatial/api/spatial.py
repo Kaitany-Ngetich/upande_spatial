@@ -20,6 +20,7 @@ import json
 
 import frappe
 from frappe import _
+from frappe.utils import cint
 
 DEFAULT_ROLE = ""
 
@@ -126,16 +127,33 @@ def upsert_feature(
 	source_module=None,
 	title=None,
 	properties=None,
+	notes=None,
+	name=None,
 ):
 	"""Create or update the Spatial Feature for (reference_doctype,
 	reference_name, feature_role) — calling modules don't need to check
 	existence first, just always call this. If reference_doctype/
 	reference_name aren't given, always creates a new standalone feature
-	(e.g. a one-off drawn shape with no owning record).
+	(e.g. a one-off drawn shape with no owning record) UNLESS `name` is
+	also given (see below).
 
 	feature_role distinguishes multiple features on the same record (e.g.
 	a Farm's boundary Polygon vs. its gate Point) — omit it and this
-	behaves exactly as it always has, one feature per reference."""
+	behaves exactly as it always has, one feature per reference.
+
+	Pass `name` (the Spatial Feature's own record name — e.g. from a prior
+	upsert_feature/get_feature call, or the `name` property
+	get_features_geojson stamps onto every exported feature) to update that
+	exact record directly, regardless of whether it has a reference_doctype/
+	reference_name at all. This is the only reliable way to update a
+	STANDALONE feature in place — one with no reference_doctype/
+	reference_name to match on, so the reference-based lookup below can
+	never find it — and it's also what makes an export
+	(get_features_geojson) → reimport (import_features) round-trip update
+	existing features instead of re-creating duplicates every time, for
+	standalone and reference-linked features alike. Falls back to the
+	reference-based lookup-or-create when `name` isn't given, or refers to
+	a record that no longer exists."""
 	if isinstance(properties, dict):
 		properties = json.dumps(properties)
 
@@ -143,7 +161,11 @@ def upsert_feature(
 	_validate_against_config(reference_doctype, feature_role, geometry_type)
 
 	existing_name = None
-	if reference_doctype and reference_name:
+	matched_by_name = False
+	if name and frappe.db.exists("Spatial Feature", name):
+		existing_name = name
+		matched_by_name = True
+	elif reference_doctype and reference_name:
 		existing_name = frappe.db.get_value(
 			"Spatial Feature",
 			{
@@ -156,6 +178,18 @@ def upsert_feature(
 
 	if existing_name:
 		doc = frappe.get_doc("Spatial Feature", existing_name)
+		if matched_by_name:
+			# Matched directly by record name rather than by the
+			# (reference_doctype, reference_name, feature_role) triple, so
+			# those aren't guaranteed to already match the doc - apply them
+			# if given, same "None means don't touch" convention as
+			# farm/company/source_module/title below.
+			if reference_doctype is not None:
+				doc.reference_doctype = reference_doctype
+			if reference_name is not None:
+				doc.reference_name = reference_name
+			if feature_role is not None:
+				doc.feature_role = feature_role
 	else:
 		doc = frappe.new_doc("Spatial Feature")
 		doc.reference_doctype = reference_doctype
@@ -173,6 +207,8 @@ def upsert_feature(
 		doc.title = title
 	if properties is not None:
 		doc.properties = properties
+	if notes is not None:
+		doc.notes = notes
 
 	layer_name, _color, _marker_icon = _resolve_layer_name(reference_doctype, feature_role, geometry_type)
 	doc.layer = layer_name
@@ -529,6 +565,16 @@ def import_features(
 
 			upsert_feature(
 				geometry=geometry,
+				# Matching by the feature's own record name (round-tripped via
+				# _spatial_feature_name, the same key get_features_geojson
+				# already stamps into every exported feature's properties)
+				# takes priority inside upsert_feature whenever it still
+				# resolves to a real record - this is what makes a re-import
+				# of a previous export update existing features in place
+				# instead of duplicating them, for standalone features (which
+				# have no reference_doctype/reference_name to match on at
+				# all) exactly as much as reference-linked ones.
+				name=props.get("_spatial_feature_name"),
 				reference_doctype=props.get("_reference_doctype") or default_reference_doctype,
 				reference_name=props.get("_reference_name"),
 				feature_role=props.get("_feature_role"),
@@ -544,3 +590,72 @@ def import_features(
 			failed.append({"index": i, "error": str(e)})
 
 	return {"imported": imported, "failed": failed}
+
+
+# --- Sharing -----------------------------------------------------------
+#
+# Thin wrappers around Frappe's native DocShare so a dashboard (Spatial
+# Studio) can let a user share one feature with a colleague without going
+# to the Desk UI. frappe.share.add() checks the calling user's own "share"
+# permission on the target doc internally (see check_share_permission in
+# frappe/share.py) before doing anything, and get_feature_shares/
+# unshare_feature each gate on doc.check_permission(...) below explicitly -
+# so nothing here is a blanket ignore_permissions bypass of OUR permission
+# model. The one narrow exception is documented on unshare_feature itself:
+# the actual DocShare row deletion has to bypass DocShare's OWN doctype
+# permissions (System Manager only), same as Frappe's Desk un-share flow
+# does, but only after we've independently verified the caller may share
+# the Spatial Feature being un-shared.
+
+@frappe.whitelist()
+def share_feature(name, user, read=1, write=0, submit=0, share=0):
+	"""Give `user` read/write access to Spatial Feature `name`. Idempotent —
+	sharing the same user again just updates their existing share rather
+	than erroring or duplicating it (frappe.share.add's native behaviour)."""
+	doc = frappe.get_doc("Spatial Feature", name)
+	doc.check_permission("read")
+	frappe.share.add(
+		"Spatial Feature",
+		name,
+		user,
+		read=cint(read),
+		write=cint(write),
+		submit=cint(submit),
+		share=cint(share),
+		notify=1,
+	)
+	return get_feature_shares(name)
+
+
+@frappe.whitelist()
+def get_feature_shares(name):
+	"""Who a feature is currently shared with, and what access they have."""
+	doc = frappe.get_doc("Spatial Feature", name)
+	doc.check_permission("read")
+	return frappe.share.get_users("Spatial Feature", name)
+
+
+@frappe.whitelist()
+def unshare_feature(name, user):
+	"""Remove `user`'s share on Spatial Feature `name`. Safe to call even if
+	nothing was shared with them — frappe.share.remove() no-ops in that
+	case rather than throwing.
+
+	Unlike frappe.share.add(), frappe.share.remove() does a plain
+	frappe.delete_doc("DocShare", ...) with NO permission check of its own
+	- and DocShare's own doctype permissions only grant delete to System
+	Manager, so a caller who is fully entitled to manage this Spatial
+	Feature's shares (has "share" on it) would otherwise hit PermissionError
+	just from DocShare's unrelated doctype-level lockdown. Same fix Frappe's
+	own Desk un-share flow uses: check the caller's actual "share"
+	permission on the Spatial Feature ourselves first, then bypass
+	DocShare's doctype permissions for the delete itself (flags=
+	{"ignore_permissions": True} - frappe.share.remove forwards `flags`
+	straight into frappe.delete_doc, which applies it to the DocShare doc's
+	own .flags.ignore_permissions, the same mechanism the Desk flow uses
+	directly). This never bypasses OUR permission model - only DocShare's,
+	and only after doc.check_permission("share") above has already passed."""
+	doc = frappe.get_doc("Spatial Feature", name)
+	doc.check_permission("share")
+	frappe.share.remove("Spatial Feature", name, user, flags={"ignore_permissions": True})
+	return get_feature_shares(name)

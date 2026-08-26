@@ -1,7 +1,7 @@
 {
  "app": "upande_spatial",
  "charts": [],
- "content": "[\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h4\\\"><b>Upande Spatial</b></span>\"\n  },\n  \"id\": \"header\",\n  \"type\": \"header\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"Shared spatial data module \\u2014 one place for geometry (points/lines/polygons) referenced by other doctypes (Farm, Warehouse, Guard Device Token, ...) rather than each module storing its own.\"\n  },\n  \"id\": \"para\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"Shortcuts\"\n  },\n  \"id\": \"shortcuts_header\",\n  \"type\": \"header\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Spatial Feature\"\n  },\n  \"id\": \"shortcuts\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Spatial Entity Config\"\n  },\n  \"id\": \"shortcuts2\",\n  \"type\": \"shortcut\"\n }\n]",
+ "content": "[\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h4\\\"><b>Upande Spatial</b></span>\"\n  },\n  \"id\": \"header\",\n  \"type\": \"header\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"Shared spatial data module \\u2014 one place for geometry (points/lines/polygons) referenced by other doctypes (Farm, Warehouse, Guard Device Token, ...) rather than each module storing its own.\"\n  },\n  \"id\": \"para\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"Shortcuts\"\n  },\n  \"id\": \"shortcuts_header\",\n  \"type\": \"header\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Spatial Feature\"\n  },\n  \"id\": \"shortcuts\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Spatial Entity Config\"\n  },\n  \"id\": \"shortcuts2\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Spatial Studio\"\n  },\n  \"id\": \"shortcuts3\",\n  \"type\": \"shortcut\"\n }\n]",
  "creation": "2026-08-21 15:40:56.292940",
  "custom_blocks": [],
  "docstatus": 0,
@@ -37,6 +37,12 @@
    "label": "Spatial Entity Config",
    "link_to": "Spatial Entity Config",
    "type": "DocType"
+  },
+  {
+   "color": "Blue",
+   "label": "Spatial Studio",
+   "type": "URL",
+   "url": "/spatial-studio"
   }
  ],
  "title": "Upande Spatial",
