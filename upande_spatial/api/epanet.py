@@ -37,6 +37,83 @@ LINK_ROLES = ("Pipe", "Pump", "Valve")
 SNAP_TOLERANCE_M = 5.0
 VALID_VALVE_TYPES = {"PRV", "PSV", "PBV", "FCV", "TCV", "GPV"}
 
+# Every field on EPANET Network that maps onto wntr's Hydraulics/Time/
+# Quality/Energy/Reactions options - the plugin's Options modal reads and
+# writes exactly this set. Each one's doctype default already matches
+# wntr's own out-of-the-box default, so a network that's never had its
+# options touched behaves identically to before this feature existed
+# (a single steady-state instant, DDA, no quality analysis).
+NETWORK_OPTION_FIELDS = (
+	"hyd_trials", "hyd_accuracy", "hyd_unbalanced", "hyd_unbalanced_trials",
+	"hyd_demand_model", "hyd_minimum_pressure", "hyd_required_pressure",
+	"time_duration_hours", "time_hydraulic_timestep_min", "time_pattern_timestep_min",
+	"time_report_timestep_min", "time_start_clocktime",
+	"qual_mode", "qual_chemical_name", "qual_units", "qual_trace_node",
+	"energy_price", "energy_efficiency_pct",
+	"react_bulk_coeff", "react_wall_coeff",
+)
+
+
+def _apply_network_options(wn, net_doc):
+	"""Wires the EPANET Network doc's option fields onto wntr's
+	WaterNetworkModel.options before solving. Select fields store their
+	human-readable Frappe labels ("Continue", "Chemical", ...) - wntr's
+	own enums are uppercase ("CONTINUE", "CHEMICAL", ...)."""
+	h = wn.options.hydraulic
+	h.trials = int(net_doc.hyd_trials or 40)
+	h.accuracy = flt(net_doc.hyd_accuracy or 0.001)
+	h.unbalanced = (net_doc.hyd_unbalanced or "Continue").upper()
+	if h.unbalanced == "CONTINUE":
+		h.unbalanced_value = int(net_doc.hyd_unbalanced_trials or 10)
+	h.demand_model = net_doc.hyd_demand_model or "DDA"
+	if h.demand_model == "PDA":
+		h.minimum_pressure = flt(net_doc.hyd_minimum_pressure or 0)
+		h.required_pressure = flt(net_doc.hyd_required_pressure or 0.1)
+
+	t = wn.options.time
+	t.duration = flt(net_doc.time_duration_hours or 0) * 3600
+	t.hydraulic_timestep = int(flt(net_doc.time_hydraulic_timestep_min or 60) * 60)
+	t.pattern_timestep = int(flt(net_doc.time_pattern_timestep_min or 60) * 60)
+	t.report_timestep = int(flt(net_doc.time_report_timestep_min or 60) * 60)
+	clocktime = net_doc.time_start_clocktime
+	if clocktime:
+		# Frappe's Time fieldtype hands back a datetime.time, not a
+		# timedelta - flt() on a bare datetime.time silently returns 0.0
+		# rather than erroring, so this has to be handled explicitly or a
+		# non-midnight start time gets quietly discarded.
+		if hasattr(clocktime, "hour"):
+			t.start_clocktime = clocktime.hour * 3600 + clocktime.minute * 60 + clocktime.second
+		elif hasattr(clocktime, "total_seconds"):
+			t.start_clocktime = clocktime.total_seconds()
+		else:
+			t.start_clocktime = flt(clocktime)
+
+	quality_warning = None
+	q = wn.options.quality
+	q.parameter = (net_doc.qual_mode or "None").upper()
+	if q.parameter == "CHEMICAL":
+		q.chemical_name = net_doc.qual_chemical_name or "Chemical"
+		q.inpfile_units = net_doc.qual_units or "mg/L"
+	elif q.parameter == "TRACE":
+		if net_doc.qual_trace_node and net_doc.qual_trace_node in wn.node_name_list:
+			q.trace_node = net_doc.qual_trace_node
+		else:
+			# An unset/unknown trace node would make wntr fail outright -
+			# fall back to no quality analysis rather than losing the
+			# hydraulic results too over a bad quality setting.
+			q.parameter = "NONE"
+			quality_warning = _("Trace analysis needs a valid Trace Node - skipped water quality analysis.")
+
+	e = wn.options.energy
+	e.global_price = flt(net_doc.energy_price or 0)
+	e.global_efficiency = flt(net_doc.energy_efficiency_pct or 75)
+
+	r = wn.options.reaction
+	r.bulk_coeff = flt(net_doc.react_bulk_coeff or 0)
+	r.wall_coeff = flt(net_doc.react_wall_coeff or 0)
+
+	return quality_warning
+
 
 def _first_geometry(geometry_field):
 	"""Spatial Feature.geometry is stored as a GeoJSON FeatureCollection
@@ -189,6 +266,31 @@ def create_network(network_name, farm=None, description=None):
 
 
 @frappe.whitelist()
+def get_network_options(network):
+	"""Current Hydraulics/Time/Quality/Energy/Reactions settings for this
+	network, for the Options modal to populate itself from."""
+	doc = frappe.get_doc("EPANET Network", network)
+	return {f: doc.get(f) for f in NETWORK_OPTION_FIELDS}
+
+
+@frappe.whitelist()
+def update_network_options(network, options):
+	"""Saves the Options modal's fields back onto the network. Only known
+	option fields are ever written - an unrecognized key in `options` is
+	silently ignored rather than erroring, so the modal can be extended
+	later without a version mismatch breaking old clients."""
+	if isinstance(options, str):
+		options = json.loads(options)
+	doc = frappe.get_doc("EPANET Network", network)
+	for fieldname in NETWORK_OPTION_FIELDS:
+		if fieldname in options:
+			doc.set(fieldname, options[fieldname])
+	doc.save()
+	frappe.db.commit()
+	return {f: doc.get(f) for f in NETWORK_OPTION_FIELDS}
+
+
+@frappe.whitelist()
 def run_simulation(network):
 	"""Builds a wntr WaterNetworkModel from this network's Spatial
 	Features, runs EPANET's hydraulic solver on it, saves an EPANET
@@ -197,8 +299,7 @@ def run_simulation(network):
 	for nodes, flow/velocity for links)."""
 	import wntr
 
-	if not frappe.db.exists("EPANET Network", network):
-		frappe.throw(_("EPANET Network {0} not found").format(network))
+	net_doc = frappe.get_doc("EPANET Network", network)
 
 	features = _load_network_features(network)
 	nodes = [f for f in features if f["feature_role"] in NODE_ROLES and f["_geom"]]
@@ -289,14 +390,19 @@ def run_simulation(network):
 			)
 		usable_link_count += 1
 
+	quality_warning = _apply_network_options(wn, net_doc)
+
 	run_doc = frappe.new_doc("EPANET Simulation Run")
 	run_doc.network = network
 	run_doc.run_by = frappe.session.user
 	run_doc.run_on = now_datetime()
 	run_doc.node_count = len(node_coords)
 	run_doc.link_count = usable_link_count
-	if skipped_links:
-		run_doc.warnings = "; ".join(f"{s['name']}: {s['reason']}" for s in skipped_links)
+	warnings = [f"{s['name']}: {s['reason']}" for s in skipped_links]
+	if quality_warning:
+		warnings.append(quality_warning)
+	if warnings:
+		run_doc.warnings = "; ".join(warnings)
 
 	started = dt.now()
 	try:
@@ -308,8 +414,12 @@ def run_simulation(network):
 		head = _last_row(results.node, "head")
 		flow = _last_row(results.link, "flowrate")
 		velocity = _last_row(results.link, "velocity")
+		quality = _last_row(results.node, "quality") if wn.options.quality.parameter != "NONE" else {}
 
-		node_results = {name: {"pressure": pressure.get(name), "head": head.get(name)} for name in pressure}
+		node_results = {
+			name: {"pressure": pressure.get(name), "head": head.get(name), "quality": quality.get(name)}
+			for name in pressure
+		}
 		link_results = {name: {"flow": flow.get(name), "velocity": velocity.get(name)} for name in flow}
 
 		payload = {
@@ -322,6 +432,11 @@ def run_simulation(network):
 				"max_pressure": max(pressure.values()) if pressure else None,
 				"min_flow": min(flow.values()) if flow else None,
 				"max_flow": max(flow.values()) if flow else None,
+			},
+			"settings": {
+				"duration_hours": flt(net_doc.time_duration_hours or 0),
+				"demand_model": wn.options.hydraulic.demand_model,
+				"quality_mode": wn.options.quality.parameter,
 			},
 			"skipped_links": skipped_links,
 		}

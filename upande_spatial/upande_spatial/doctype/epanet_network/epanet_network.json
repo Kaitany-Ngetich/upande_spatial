@@ -13,7 +13,39 @@
   "column_break_1",
   "company",
   "section_break_1",
-  "description"
+  "description",
+  "section_break_hyd",
+  "hyd_trials",
+  "hyd_accuracy",
+  "column_break_hyd1",
+  "hyd_unbalanced",
+  "hyd_unbalanced_trials",
+  "column_break_hyd2",
+  "hyd_demand_model",
+  "hyd_minimum_pressure",
+  "hyd_required_pressure",
+  "section_break_time",
+  "time_duration_hours",
+  "time_hydraulic_timestep_min",
+  "column_break_time1",
+  "time_pattern_timestep_min",
+  "time_report_timestep_min",
+  "column_break_time2",
+  "time_start_clocktime",
+  "section_break_qual",
+  "qual_mode",
+  "column_break_qual1",
+  "qual_chemical_name",
+  "qual_units",
+  "qual_trace_node",
+  "section_break_energy",
+  "energy_price",
+  "column_break_energy1",
+  "energy_efficiency_pct",
+  "section_break_react",
+  "react_bulk_coeff",
+  "column_break_react1",
+  "react_wall_coeff"
  ],
  "fields": [
   {
@@ -49,6 +81,194 @@
    "fieldname": "description",
    "fieldtype": "Small Text",
    "label": "Description"
+  },
+  {
+   "fieldname": "section_break_hyd",
+   "fieldtype": "Section Break",
+   "label": "Hydraulic Options"
+  },
+  {
+   "default": "40",
+   "description": "Max trials the hydraulic solver runs per timestep before giving up",
+   "fieldname": "hyd_trials",
+   "fieldtype": "Int",
+   "label": "Trials"
+  },
+  {
+   "default": "0.001",
+   "description": "Convergence criterion - smaller is stricter",
+   "fieldname": "hyd_accuracy",
+   "fieldtype": "Float",
+   "label": "Accuracy"
+  },
+  {
+   "fieldname": "column_break_hyd1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Continue",
+   "fieldname": "hyd_unbalanced",
+   "fieldtype": "Select",
+   "label": "If Unbalanced",
+   "options": "Stop\nContinue"
+  },
+  {
+   "default": "10",
+   "depends_on": "eval:doc.hyd_unbalanced==\"Continue\"",
+   "fieldname": "hyd_unbalanced_trials",
+   "fieldtype": "Int",
+   "label": "Extra Trials Before Continuing"
+  },
+  {
+   "fieldname": "column_break_hyd2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "DDA",
+   "description": "Demand Driven (junctions always get their full demand) or Pressure Driven (demand scales with available pressure)",
+   "fieldname": "hyd_demand_model",
+   "fieldtype": "Select",
+   "label": "Demand Model",
+   "options": "DDA\nPDA"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.hyd_demand_model==\"PDA\"",
+   "description": "Pressure (m) below which a junction gets zero demand",
+   "fieldname": "hyd_minimum_pressure",
+   "fieldtype": "Float",
+   "label": "Minimum Pressure (m)"
+  },
+  {
+   "default": "0.1",
+   "depends_on": "eval:doc.hyd_demand_model==\"PDA\"",
+   "description": "Pressure (m) at/above which a junction gets its full demand",
+   "fieldname": "hyd_required_pressure",
+   "fieldtype": "Float",
+   "label": "Required Pressure (m)"
+  },
+  {
+   "fieldname": "section_break_time",
+   "fieldtype": "Section Break",
+   "label": "Time Options"
+  },
+  {
+   "default": "0",
+   "description": "0 = a single steady-state snapshot. Above 0 runs a real extended-period simulation.",
+   "fieldname": "time_duration_hours",
+   "fieldtype": "Float",
+   "label": "Duration (hours)"
+  },
+  {
+   "default": "60",
+   "fieldname": "time_hydraulic_timestep_min",
+   "fieldtype": "Int",
+   "label": "Hydraulic Timestep (min)"
+  },
+  {
+   "fieldname": "column_break_time1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "60",
+   "fieldname": "time_pattern_timestep_min",
+   "fieldtype": "Int",
+   "label": "Pattern Timestep (min)"
+  },
+  {
+   "default": "60",
+   "fieldname": "time_report_timestep_min",
+   "fieldtype": "Int",
+   "label": "Report Timestep (min)"
+  },
+  {
+   "fieldname": "column_break_time2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "00:00:00",
+   "fieldname": "time_start_clocktime",
+   "fieldtype": "Time",
+   "label": "Start Clocktime"
+  },
+  {
+   "fieldname": "section_break_qual",
+   "fieldtype": "Section Break",
+   "label": "Water Quality"
+  },
+  {
+   "default": "None",
+   "fieldname": "qual_mode",
+   "fieldtype": "Select",
+   "label": "Analysis Type",
+   "options": "None\nChemical\nAge\nTrace"
+  },
+  {
+   "fieldname": "column_break_qual1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.qual_mode==\"Chemical\"",
+   "fieldname": "qual_chemical_name",
+   "fieldtype": "Data",
+   "label": "Chemical Name"
+  },
+  {
+   "default": "mg/L",
+   "depends_on": "eval:doc.qual_mode==\"Chemical\"",
+   "fieldname": "qual_units",
+   "fieldtype": "Data",
+   "label": "Units"
+  },
+  {
+   "depends_on": "eval:doc.qual_mode==\"Trace\"",
+   "description": "Spatial Feature name of the node to trace water from",
+   "fieldname": "qual_trace_node",
+   "fieldtype": "Data",
+   "label": "Trace Node"
+  },
+  {
+   "fieldname": "section_break_energy",
+   "fieldtype": "Section Break",
+   "label": "Energy"
+  },
+  {
+   "default": "0",
+   "fieldname": "energy_price",
+   "fieldtype": "Float",
+   "label": "Global Energy Price (per kWh)"
+  },
+  {
+   "fieldname": "column_break_energy1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "75",
+   "fieldname": "energy_efficiency_pct",
+   "fieldtype": "Float",
+   "label": "Global Pump Efficiency (%)"
+  },
+  {
+   "fieldname": "section_break_react",
+   "fieldtype": "Section Break",
+   "label": "Reactions"
+  },
+  {
+   "default": "0",
+   "description": "Negative = decays, positive = grows, per day",
+   "fieldname": "react_bulk_coeff",
+   "fieldtype": "Float",
+   "label": "Bulk Reaction Coeff. (1/day)"
+  },
+  {
+   "fieldname": "column_break_react1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "react_wall_coeff",
+   "fieldtype": "Float",
+   "label": "Wall Reaction Coeff. (1/day)"
   }
  ],
  "grid_page_length": 50,
