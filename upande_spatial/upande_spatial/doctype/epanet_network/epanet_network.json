@@ -9,7 +9,8 @@
  "engine": "InnoDB",
  "field_order": [
   "network_name",
-  "farm",
+  "reference_doctype",
+  "reference_name",
   "column_break_1",
   "company",
   "section_break_1",
@@ -57,10 +58,17 @@
    "unique": 1
   },
   {
-   "fieldname": "farm",
+   "description": "What this network belongs to - Farm, Warehouse, Location, or any other doctype registered in Spatial Entity Config. Optional: a network can exist with no specific owning record.",
+   "fieldname": "reference_doctype",
    "fieldtype": "Link",
-   "label": "Farm",
-   "options": "Farm"
+   "label": "Reference Doctype",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Name",
+   "options": "reference_doctype"
   },
   {
    "fieldname": "column_break_1",

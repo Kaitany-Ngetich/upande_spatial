@@ -163,10 +163,36 @@ def _nearest_node(coord, nodes):
 
 
 @frappe.whitelist()
+def list_owner_doctypes():
+	"""Which doctypes an EPANET Network can be scoped to. Reuses Spatial
+	Entity Config's own registry of "what's spatially trackable" rather
+	than a second hardcoded list - a network isn't only ever a farm's
+	network; it can belong to a Warehouse, a Location, or anything else a
+	module registers there, or to nothing at all."""
+	return frappe.get_all("Spatial Entity Config", pluck="name", order_by="name")
+
+
+@frappe.whitelist()
+def list_owner_candidates(doctype):
+	"""Existing records of the given owner doctype, for the network-owner
+	picker - respects the caller's own read permissions on that doctype,
+	same as any other frappe.get_all call."""
+	if not doctype or not frappe.db.exists("DocType", doctype):
+		return []
+	meta = frappe.get_meta(doctype)
+	title_field = meta.get_title_field()
+	fields = ["name"] + ([title_field] if title_field and title_field != "name" else [])
+	rows = frappe.get_all(doctype, fields=fields, limit=500, order_by="name")
+	return [{"name": r.name, "title": (r.get(title_field) if title_field else None) or r.name} for r in rows]
+
+
+@frappe.whitelist()
 def list_networks():
 	"""Every EPANET Network with its element counts by role - drives the
 	network picker in the Map Viewer EPANET plugin."""
-	networks = frappe.get_all("EPANET Network", fields=["name", "network_name", "farm"])
+	networks = frappe.get_all(
+		"EPANET Network", fields=["name", "network_name", "reference_doctype", "reference_name"]
+	)
 	counts = frappe.db.sql(
 		"""
 		select reference_name, feature_role, count(*) as n
@@ -253,11 +279,13 @@ def delete_element(name):
 
 
 @frappe.whitelist()
-def create_network(network_name, farm=None, description=None):
+def create_network(network_name, reference_doctype=None, reference_name=None, description=None):
 	doc = frappe.new_doc("EPANET Network")
 	doc.network_name = network_name
-	if farm:
-		doc.farm = farm
+	if reference_doctype:
+		doc.reference_doctype = reference_doctype
+	if reference_name:
+		doc.reference_name = reference_name
 	if description:
 		doc.description = description
 	doc.save()
