@@ -18,13 +18,47 @@ let currentNetwork = null;
 let placement = null; // {kind:'node'|'link', role, clicks:[[lon,lat],...]}
 let mapClickBound = false;
 
-function colorForPressure(p, min, max){
-  if(p==null || min==null || max==null || min===max) return "#8a8780";
-  const t = Math.max(0, Math.min(1, (p-min)/(max-min)));
-  const r = Math.round(200 - t*140);
-  const g = Math.round(60 + t*150);
-  return `rgb(${r},${g},60)`;
+// Sequential 4-stop ramp reusing the app's own palette (blue -> green ->
+// amber -> red) instead of a foreign one - low values read as "calm", high
+// values as "critical", and it matches the exact hex values Spatial Entity
+// Config already uses elsewhere in the app for other layers.
+const RAMP_STOPS = [
+  {t:0,    rgb:[24,95,165]},   // --blue
+  {t:0.34, rgb:[59,109,17]},   // --green
+  {t:0.67, rgb:[133,79,11]},   // --amber
+  {t:1,    rgb:[179,38,30]},   // danger red, used elsewhere for delete/errors
+];
+
+function rampColor(t){
+  if(t==null || isNaN(t)) return "#8a8780";
+  t = Math.max(0, Math.min(1, t));
+  let a = RAMP_STOPS[0], b = RAMP_STOPS[RAMP_STOPS.length-1];
+  for(let i=0;i<RAMP_STOPS.length-1;i++){
+    if(t>=RAMP_STOPS[i].t && t<=RAMP_STOPS[i+1].t){ a=RAMP_STOPS[i]; b=RAMP_STOPS[i+1]; break; }
+  }
+  const span = (b.t-a.t) || 1;
+  const lt = (t-a.t)/span;
+  const r = Math.round(a.rgb[0] + (b.rgb[0]-a.rgb[0])*lt);
+  const g = Math.round(a.rgb[1] + (b.rgb[1]-a.rgb[1])*lt);
+  const bch = Math.round(a.rgb[2] + (b.rgb[2]-a.rgb[2])*lt);
+  return `rgb(${r},${g},${bch})`;
 }
+
+function rampCssGradient(){
+  return `linear-gradient(90deg, ${RAMP_STOPS.map(s=>`rgb(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]}) ${s.t*100}%`).join(", ")})`;
+}
+
+// Which result field each color-by choice reads, per role - node results
+// carry pressure+head, link results carry flow+velocity (run_simulation
+// already returns all four; only pressure/flow were ever wired to the map).
+const NODE_COLOR_VARS = {
+  pressure: {label:"Pressure", unit:"m",     get:(r)=>r.pressure},
+  head:     {label:"Head",     unit:"m",     get:(r)=>r.head},
+};
+const LINK_COLOR_VARS = {
+  flow:     {label:"Flow",     unit:"m³/s", get:(r)=>r.flow!=null ? Math.abs(r.flow) : null},
+  velocity: {label:"Velocity", unit:"m/s",       get:(r)=>r.velocity},
+};
 
 // ─────────────────────────────  Property forms  ─────────────────────────────
 // Deliberately a fixed, small field set per role rather than a fully
@@ -170,40 +204,76 @@ function clearResultLayer(api){
   resultLayerGroup = null;
 }
 
-async function drawResultLayer(api, network, result){
+async function drawResultLayer(api, network, result, nodeVarKey, linkVarKey){
   clearResultLayer(api);
   const map = api.getMap();
   const fc = await api.callMethod(API_EPANET+"get_network_geojson", {network});
   const nodeResults = result.node_results || {};
   const linkResults = result.link_results || {};
-  const pressures = Object.values(nodeResults).map(v=>v.pressure).filter(v=>v!=null);
-  const minP = pressures.length ? Math.min(...pressures) : 0;
-  const maxP = pressures.length ? Math.max(...pressures) : 0;
+  const nodeVar = NODE_COLOR_VARS[nodeVarKey] || NODE_COLOR_VARS.pressure;
+  const linkVar = LINK_COLOR_VARS[linkVarKey] || LINK_COLOR_VARS.flow;
+
+  const nodeVals = Object.values(nodeResults).map(nodeVar.get).filter(v=>v!=null);
+  const linkVals = Object.values(linkResults).map(linkVar.get).filter(v=>v!=null);
+  const nodeMin = nodeVals.length ? Math.min(...nodeVals) : 0;
+  const nodeMax = nodeVals.length ? Math.max(...nodeVals) : 0;
+  const linkMin = linkVals.length ? Math.min(...linkVals) : 0;
+  const linkMax = linkVals.length ? Math.max(...linkVals) : 0;
 
   resultLayerGroup = L.geoJSON(fc, {
     pointToLayer: (feature, latlng)=>{
       const r = nodeResults[feature.properties._spatial_feature_name];
-      const color = r ? colorForPressure(r.pressure, minP, maxP) : "#8a8780";
+      const val = r ? nodeVar.get(r) : null;
+      const t = val==null ? null : (nodeMax>nodeMin ? (val-nodeMin)/(nodeMax-nodeMin) : 0.5);
+      const color = t==null ? "#8a8780" : rampColor(t);
       const marker = L.circleMarker(latlng, {radius:7, color:"#fff", weight:1.5, fillColor:color, fillOpacity:0.95});
-      marker.bindTooltip(r ? `${api.escHtml(feature.properties._title||feature.properties._spatial_feature_name)}<br>Pressure: ${api.fmtNum(r.pressure,1)} m` : "No result");
+      marker.bindTooltip(val!=null
+        ? `${api.escHtml(feature.properties._title||feature.properties._spatial_feature_name)}<br>${nodeVar.label}: ${api.fmtNum(val,2)} ${nodeVar.unit}`
+        : "No result");
       return marker;
     },
     style: (feature)=>{
       const r = linkResults[feature.properties._spatial_feature_name];
-      const flow = r ? Math.abs(r.flow||0) : 0;
-      return {color: r ? "#185FA5" : "#8a8780", weight: r ? Math.max(2, Math.min(9, flow*400+2)) : 2, opacity:0.9};
+      const val = r ? linkVar.get(r) : null;
+      const t = val==null ? null : (linkMax>linkMin ? (val-linkMin)/(linkMax-linkMin) : 0.5);
+      const flowMag = r ? Math.abs(r.flow||0) : 0;
+      return {color: t==null ? "#8a8780" : rampColor(t), weight: r ? Math.max(2, Math.min(9, flowMag*400+2)) : 2, opacity:0.9};
     },
     onEachFeature: (feature, layer)=>{
       const r = linkResults[feature.properties._spatial_feature_name];
-      if(r) layer.bindTooltip(`${api.escHtml(feature.properties._title||feature.properties._spatial_feature_name)}<br>Flow: ${api.fmtNum(r.flow,4)} m³/s`);
+      const val = r ? linkVar.get(r) : null;
+      if(val!=null) layer.bindTooltip(`${api.escHtml(feature.properties._title||feature.properties._spatial_feature_name)}<br>${linkVar.label}: ${api.fmtNum(val,4)} ${linkVar.unit}`);
     },
   }).addTo(map);
+
+  return {nodeMin, nodeMax, nodeVar, linkMin, linkMax, linkVar};
+}
+
+function renderLegend(legendEl, api, ranges){
+  if(!ranges){ legendEl.innerHTML = ""; return; }
+  const {nodeMin, nodeMax, nodeVar, linkMin, linkMax, linkVar} = ranges;
+  const row = (label, min, max, unit)=>`
+    <div style="margin-top:8px">
+      <div style="font-size:11px;font-weight:600;color:var(--ink-4);margin-bottom:3px">${api.escHtml(label)}</div>
+      <div style="height:8px;border-radius:4px;background:${rampCssGradient()}"></div>
+      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-mute);margin-top:2px">
+        <span>${api.fmtNum(min,2)}</span><span>${api.fmtNum(max,2)} ${api.escHtml(unit)}</span>
+      </div>
+    </div>`;
+  legendEl.innerHTML = row("Nodes — "+nodeVar.label, nodeMin, nodeMax, nodeVar.unit)
+    + row("Links — "+linkVar.label, linkMin, linkMax, linkVar.unit);
 }
 
 function renderResult(result, api, resultEl){
+  const nodeResults = result.node_results || {};
+  const linkResults = result.link_results || {};
+  const heads = Object.values(nodeResults).map(v=>v.head).filter(v=>v!=null);
+  const velocities = Object.values(linkResults).map(v=>v.velocity).filter(v=>v!=null);
   const s = result.summary || {};
   let html = `<div class="kv-row"><span class="kv-l">Pressure</span><span class="kv-v">${api.fmtNum(s.min_pressure,1)} – ${api.fmtNum(s.max_pressure,1)} m</span></div>`;
+  if(heads.length) html += `<div class="kv-row"><span class="kv-l">Head</span><span class="kv-v">${api.fmtNum(Math.min(...heads),1)} – ${api.fmtNum(Math.max(...heads),1)} m</span></div>`;
   html += `<div class="kv-row"><span class="kv-l">Flow</span><span class="kv-v">${api.fmtNum(s.min_flow,4)} – ${api.fmtNum(s.max_flow,4)} m³/s</span></div>`;
+  if(velocities.length) html += `<div class="kv-row"><span class="kv-l">Velocity</span><span class="kv-v">${api.fmtNum(Math.min(...velocities),3)} – ${api.fmtNum(Math.max(...velocities),3)} m/s</span></div>`;
   if(result.skipped_links && result.skipped_links.length){
     html += `<div class="hint" style="color:#b3261e;margin-top:6px">${result.skipped_links.length} link(s) skipped — `
       + result.skipped_links.map(sk=>api.escHtml(sk.name+": "+sk.reason)).join("; ") + "</div>";
@@ -252,7 +322,16 @@ function renderPanel(container, api){
     <div class="proc-card">
       <h4><i class="fa-solid fa-droplet" style="color:var(--blue)"></i>Simulation</h4>
       <button class="btn btn-sm btn-primary" id="epanetRunBtn" style="width:100%;justify-content:center" disabled><i class="fa-solid fa-play"></i>Run simulation</button>
-      <label class="check-row" style="margin-top:8px"><input type="checkbox" id="epanetShowResults">Color map by pressure / flow</label>
+      <label class="check-row" style="margin-top:8px"><input type="checkbox" id="epanetShowResults">Show results on map</label>
+      <div class="field-row" id="epanetColorByRow" style="margin-top:6px;display:none">
+        <div class="field"><label>Node color</label><select id="epanetNodeColorVar">
+          <option value="pressure">Pressure</option><option value="head">Head</option>
+        </select></div>
+        <div class="field"><label>Link color</label><select id="epanetLinkColorVar">
+          <option value="flow">Flow</option><option value="velocity">Velocity</option>
+        </select></div>
+      </div>
+      <div id="epanetLegend"></div>
       <div id="epanetResult"></div>
     </div>
   `;
@@ -263,6 +342,26 @@ function renderPanel(container, api){
   const placeLinkBtn = container.querySelector("#epanetPlaceLinkBtn");
   const resultEl = container.querySelector("#epanetResult");
   const showResultsCb = container.querySelector("#epanetShowResults");
+  const colorByRow = container.querySelector("#epanetColorByRow");
+  const nodeColorSel = container.querySelector("#epanetNodeColorVar");
+  const linkColorSel = container.querySelector("#epanetLinkColorVar");
+  const legendEl = container.querySelector("#epanetLegend");
+
+  async function updateResultsDisplay(){
+    if(!showResultsCb.checked) return;
+    if(!lastResult){
+      try{ lastResult = await api.callMethod(API_EPANET+"get_last_result", {network: currentNetwork}); }
+      catch(e){ /* fall through to the no-result toast below */ }
+    }
+    if(lastResult){
+      const ranges = await drawResultLayer(api, currentNetwork, lastResult, nodeColorSel.value, linkColorSel.value);
+      renderLegend(legendEl, api, ranges);
+    } else {
+      api.toast("Run a simulation first.", true);
+      showResultsCb.checked = false;
+      colorByRow.style.display = "none";
+    }
+  }
 
   function onNetworkChange(networks){
     currentNetwork = sel.value;
@@ -273,6 +372,8 @@ function renderPanel(container, api){
     lastResult = null;
     resultEl.innerHTML = "";
     showResultsCb.checked = false;
+    colorByRow.style.display = "none";
+    legendEl.innerHTML = "";
     clearResultLayer(api);
     if(has) refreshElementList(api);
   }
@@ -313,6 +414,7 @@ function renderPanel(container, api){
       lastResult = result;
       renderResult(result, api, resultEl);
       api.toast("Simulation complete.");
+      await updateResultsDisplay();
     }catch(e){
       resultEl.innerHTML = '<div class="import-fail">'+api.escHtml(e.message)+'</div>';
     }finally{
@@ -321,18 +423,18 @@ function renderPanel(container, api){
   });
 
   showResultsCb.addEventListener("change", async ()=>{
-    if(!showResultsCb.checked){ clearResultLayer(api); return; }
-    if(!lastResult){
-      try{ lastResult = await api.callMethod(API_EPANET+"get_last_result", {network: currentNetwork}); }
-      catch(e){ /* fall through to the no-result toast below */ }
+    if(!showResultsCb.checked){
+      clearResultLayer(api);
+      colorByRow.style.display = "none";
+      legendEl.innerHTML = "";
+      return;
     }
-    if(lastResult){
-      await drawResultLayer(api, currentNetwork, lastResult);
-    } else {
-      api.toast("Run a simulation first.", true);
-      showResultsCb.checked = false;
-    }
+    colorByRow.style.display = "flex";
+    await updateResultsDisplay();
   });
+
+  nodeColorSel.addEventListener("change", updateResultsDisplay);
+  linkColorSel.addEventListener("change", updateResultsDisplay);
 }
 
 window.MapViewer.registerPlugin({
