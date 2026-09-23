@@ -9,6 +9,7 @@ readme = "README.md"
 dynamic = ["version"]
 dependencies = [
     # "frappe~=16.0.0" # Installed and managed by bench.
+    "wntr>=1.5.0", # EPANET hydraulic engine (via its bundled toolkit binary) for the Map Viewer EPANET plugin
 ]
 
 [build-system]

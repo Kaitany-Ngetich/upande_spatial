@@ -20,7 +20,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import cint
+from frappe.utils import cint, flt
 
 DEFAULT_ROLE = ""
 
@@ -88,14 +88,16 @@ def _resolve_layer_name(reference_doctype, feature_role, geometry_type):
 	Spatial Entity Config / Spatial Entity Allowed Geometry row that
 	_validate_against_config above matches on (reference_doctype +
 	geometry_type + feature_role, blank feature_role on the config row
-	meaning "any role"). Returns a (layer_name, color, marker_icon) tuple.
+	meaning "any role"). Returns a (layer_name, color, marker_icon,
+	line_width, fill_opacity) tuple.
 
-	Falls back to (reference_doctype, None, None) — or ("Uncategorized",
-	None, None) when there's no reference_doctype at all — whenever there's
-	no Spatial Entity Config row for this doctype, no matching
-	allowed_geometries row, or the matching row exists but its layer_name is
-	blank (a combo that's allowed but not assigned to a specific layer)."""
-	fallback = (reference_doctype or _("Uncategorized"), None, None)
+	Falls back to (reference_doctype, None, None, None, None) — or
+	("Uncategorized", None, None, None, None) when there's no
+	reference_doctype at all — whenever there's no Spatial Entity Config row
+	for this doctype, no matching allowed_geometries row, or the matching
+	row exists but its layer_name is blank (a combo that's allowed but not
+	assigned to a specific layer)."""
+	fallback = (reference_doctype or _("Uncategorized"), None, None, None, None)
 	if not reference_doctype:
 		return fallback
 	if not frappe.db.exists("Spatial Entity Config", reference_doctype):
@@ -110,7 +112,7 @@ def _resolve_layer_name(reference_doctype, feature_role, geometry_type):
 		role_matches = (not row.feature_role) or row.feature_role == role
 		if row.geometry_type == geometry_type and role_matches:
 			if row.layer_name:
-				return (row.layer_name, row.color, row.marker_icon)
+				return (row.layer_name, row.color, row.marker_icon, row.line_width or None, row.fill_opacity if row.fill_opacity else None)
 			return fallback
 
 	return fallback
@@ -210,8 +212,18 @@ def upsert_feature(
 	if notes is not None:
 		doc.notes = notes
 
-	layer_name, _color, _marker_icon = _resolve_layer_name(reference_doctype, feature_role, geometry_type)
+	layer_name, _color, _marker_icon, _line_width, _fill_opacity = _resolve_layer_name(reference_doctype, feature_role, geometry_type)
 	doc.layer = layer_name
+
+	# Feature check-out/locking (see checkout_feature/release_feature below):
+	# a feature someone else has checked out refuses edits from anybody but
+	# that user or a System Manager, so two people can't silently clobber
+	# each other's in-progress edits to the same geometry. Doesn't apply to
+	# brand-new features (nothing to be locked yet).
+	if doc.checked_out_by and doc.checked_out_by != frappe.session.user and "System Manager" not in frappe.get_roles():
+		frappe.throw(
+			_("This feature is checked out by {0} — release it first.").format(doc.checked_out_by)
+		)
 
 	# No ignore_permissions here on purpose - a caller authenticating as a
 	# real Frappe user (their own API key, not a shared/admin one) should
@@ -228,6 +240,11 @@ def upsert_feature(
 		"area_sq_m": doc.area_sq_m,
 		"length_m": doc.length_m,
 		"layer": doc.layer,
+		# True the first time this record is created, False on every
+		# subsequent update - lets a caller like import_features below know
+		# whether to stamp create-only provenance (source_file/import_date)
+		# without re-deriving the same existing_name lookup itself.
+		"created": existing_name is None,
 	}
 
 
@@ -345,7 +362,7 @@ def get_features_geojson(farm=None, reference_doctype=None, feature_role=None, s
 			parsed = json.loads(r.geometry)
 		except Exception:
 			continue
-		_layer_name, color, marker_icon = _resolve_layer_name(
+		_layer_name, color, marker_icon, line_width, fill_opacity = _resolve_layer_name(
 			r.reference_doctype, r.feature_role, r.geometry_type
 		)
 		for f in parsed.get("features", []):
@@ -359,6 +376,8 @@ def get_features_geojson(farm=None, reference_doctype=None, feature_role=None, s
 			f["properties"]["_layer"] = r.layer
 			f["properties"]["color"] = color
 			f["properties"]["marker_icon"] = marker_icon
+			f["properties"]["line_width"] = line_width
+			f["properties"]["fill_opacity"] = fill_opacity
 			features.append(f)
 
 	return {"type": "FeatureCollection", "features": features}
@@ -466,7 +485,8 @@ def get_layers():
 	matters."""
 	configured = frappe.db.sql(
 		"""
-		SELECT g.layer_name AS layer_name, g.color AS color, g.marker_icon AS marker_icon
+		SELECT g.layer_name AS layer_name, g.color AS color, g.marker_icon AS marker_icon,
+			g.line_width AS line_width, g.fill_opacity AS fill_opacity
 		FROM `tabSpatial Entity Allowed Geometry` g
 		WHERE g.layer_name IS NOT NULL AND g.layer_name != ''
 		ORDER BY g.layer_name ASC, g.parent ASC
@@ -481,6 +501,8 @@ def get_layers():
 				"layer_name": row.layer_name,
 				"color": row.color,
 				"marker_icon": row.marker_icon,
+				"line_width": row.line_width or None,
+				"fill_opacity": row.fill_opacity if row.fill_opacity else None,
 				"configured": True,
 			}
 
@@ -509,7 +531,7 @@ def get_layers():
 _ROUNDTRIP_PROPERTY_KEYS = {
 	"_spatial_feature_name", "_title", "_farm", "_company",
 	"_feature_role", "_reference_doctype", "_reference_name", "_layer",
-	"color", "marker_icon",
+	"color", "marker_icon", "line_width", "fill_opacity",
 }
 
 
@@ -520,6 +542,7 @@ def import_features(
 	default_farm=None,
 	default_company=None,
 	source_module=None,
+	source_file=None,
 ):
 	"""Batch import GeoJSON Features via upsert_feature (reused, not
 	duplicated) — accepts a JSON string or already-parsed list/dict, and
@@ -532,6 +555,16 @@ def import_features(
 	to this call's default_* args when a property is absent. That means an
 	export (get_features_geojson) → reimport (this function) round-trip
 	preserves ownership with no extra mapping required by the caller.
+
+	`source_file` is the uploaded filename (Shapefile/KML/GPX/CSV/GeoJSON),
+	passed through from whatever frontend handled the actual file upload —
+	this function itself never touches a filesystem. When given, it's
+	stamped onto `source_file`/`import_date` (today) for every feature this
+	call actually CREATES, using upsert_feature's own "created" flag on its
+	result rather than re-deriving that here. A feature this call merely
+	UPDATES (re-importing a previous export, or re-running the same import)
+	keeps whatever source_file/import_date it already had — provenance
+	describes how a record first came to exist, not every subsequent touch.
 
 	One bad feature never aborts the batch: each feature's upsert runs in
 	its own try/except, logged via frappe.log_error and skipped, same
@@ -551,6 +584,7 @@ def import_features(
 
 	imported = 0
 	failed = []
+	imported_names = []  # every feature this call created or updated, in order - lets a caller (e.g. Map Viewer's "Prepare Layout" handoff) zoom to / highlight exactly what just came in, without a second round-trip
 
 	for i, feat in enumerate(feature_list):
 		try:
@@ -563,7 +597,7 @@ def import_features(
 			props = feat.get("properties") or {}
 			extra_properties = {k: v for k, v in props.items() if k not in _ROUNDTRIP_PROPERTY_KEYS}
 
-			upsert_feature(
+			result = upsert_feature(
 				geometry=geometry,
 				# Matching by the feature's own record name (round-tripped via
 				# _spatial_feature_name, the same key get_features_geojson
@@ -584,12 +618,27 @@ def import_features(
 				title=props.get("_title"),
 				properties=extra_properties or None,
 			)
+
+			if source_file and result.get("created"):
+				# Only ever stamped onto a feature this call just created -
+				# see the "created" flag on upsert_feature's return value.
+				# A plain db.set_value (not another doc.save()) so this
+				# doesn't re-run validation/hooks or bump `modified` a
+				# second time for the same import.
+				frappe.db.set_value(
+					"Spatial Feature",
+					result["name"],
+					{"source_file": source_file, "import_date": frappe.utils.today()},
+					update_modified=False,
+				)
+
 			imported += 1
+			imported_names.append(result["name"])
 		except Exception as e:
 			frappe.log_error("Spatial import_features", f"index {i}: {e}")
 			failed.append({"index": i, "error": str(e)})
 
-	return {"imported": imported, "failed": failed}
+	return {"imported": imported, "failed": failed, "imported_names": imported_names}
 
 
 # --- Sharing -----------------------------------------------------------
@@ -659,3 +708,122 @@ def unshare_feature(name, user):
 	doc.check_permission("share")
 	frappe.share.remove("Spatial Feature", name, user, flags={"ignore_permissions": True})
 	return get_feature_shares(name)
+
+
+@frappe.whitelist()
+def get_layer_properties(layer_name):
+	"""Every Spatial Entity Config row (across every reference_doctype)
+	that uses this layer_name - normally exactly one, but layer_name isn't
+	enforced unique, so this returns every match rather than assuming.
+	Map Viewer's Layer Properties panel reads this to show what a layer
+	actually maps to and to seed its color picker."""
+	rows = []
+	for cfg_name in frappe.get_all("Spatial Entity Config", pluck="name"):
+		cfg = frappe.get_cached_doc("Spatial Entity Config", cfg_name)
+		for row in cfg.allowed_geometries:
+			if row.layer_name == layer_name:
+				rows.append({
+					"config": cfg_name,
+					"reference_doctype": cfg.reference_doctype,
+					"feature_role": row.feature_role,
+					"geometry_type": row.geometry_type,
+					"color": row.color,
+					"marker_icon": row.marker_icon,
+					"line_width": row.line_width or None,
+					"fill_opacity": row.fill_opacity if row.fill_opacity else None,
+				})
+	return {
+		"layer_name": layer_name,
+		"rows": rows,
+		"feature_count": frappe.db.count("Spatial Feature", {"layer": layer_name}),
+	}
+
+
+@frappe.whitelist()
+def update_layer_properties(layer_name, color=None, marker_icon=None, line_width=None, fill_opacity=None):
+	"""Applies color/marker_icon/line_width/fill_opacity to every Spatial
+	Entity Config row using this layer_name, keeping them all consistent -
+	see get_layer_properties for why there can be more than one. None means
+	"leave as-is" for that field, same convention as upsert_feature."""
+	updated = 0
+	for cfg_name in frappe.get_all("Spatial Entity Config", pluck="name"):
+		cfg = frappe.get_doc("Spatial Entity Config", cfg_name)
+		changed = False
+		for row in cfg.allowed_geometries:
+			if row.layer_name != layer_name:
+				continue
+			if color is not None:
+				row.color = color
+				changed = True
+			if marker_icon is not None:
+				row.marker_icon = marker_icon
+				changed = True
+			if line_width is not None:
+				row.line_width = flt(line_width)
+				changed = True
+			if fill_opacity is not None:
+				row.fill_opacity = flt(fill_opacity)
+				changed = True
+		if changed:
+			cfg.save()
+			frappe.clear_document_cache("Spatial Entity Config", cfg_name)
+			updated += 1
+	frappe.db.commit()
+	return {"configs_updated": updated}
+
+
+# --- Feature check-out (editing lock) ------------------------------------
+#
+# A lightweight "I'm working on this" lock, not a real database lock — two
+# people editing the same feature in a map editor at once would otherwise
+# silently overwrite one another's geometry with no warning, since
+# upsert_feature has no other notion of concurrent edits. checkout_feature
+# marks a feature as claimed; upsert_feature (see the check added right
+# before its own doc.save() above) then refuses anyone else's edits to that
+# feature until release_feature clears the claim. A System Manager can
+# always release (or edit through) someone else's checkout, e.g. if a
+# session died mid-edit and left a feature stuck locked.
+
+@frappe.whitelist()
+def checkout_feature(name):
+	"""Claim Spatial Feature `name` for editing under the current session
+	user. Throws frappe.ValidationError if it's already checked out by
+	somebody else — call release_feature first (or have a System Manager do
+	it) rather than forcing it. Checking out a feature that's already
+	checked out by the SAME user is a harmless no-op refresh of
+	checked_out_at, not an error."""
+	doc = frappe.get_doc("Spatial Feature", name)
+	doc.check_permission("write")
+
+	if doc.checked_out_by and doc.checked_out_by != frappe.session.user:
+		frappe.throw(
+			_("{0} already has this feature checked out.").format(doc.checked_out_by)
+		)
+
+	doc.checked_out_by = frappe.session.user
+	doc.checked_out_at = frappe.utils.now_datetime()
+	doc.save()
+	frappe.db.commit()
+	return {"name": doc.name, "checked_out_by": doc.checked_out_by, "checked_out_at": doc.checked_out_at}
+
+
+@frappe.whitelist()
+def release_feature(name):
+	"""Clear Spatial Feature `name`'s check-out. Only the user who checked
+	it out, or a System Manager (for the stuck-session case described
+	above), may release it — anyone else gets frappe.PermissionError. Safe
+	to call on a feature that isn't checked out at all; just no-ops."""
+	doc = frappe.get_doc("Spatial Feature", name)
+	doc.check_permission("write")
+
+	if doc.checked_out_by and doc.checked_out_by != frappe.session.user and "System Manager" not in frappe.get_roles():
+		frappe.throw(
+			_("Only {0} or a System Manager can release this feature.").format(doc.checked_out_by),
+			frappe.PermissionError,
+		)
+
+	doc.checked_out_by = None
+	doc.checked_out_at = None
+	doc.save()
+	frappe.db.commit()
+	return {"name": doc.name, "checked_out_by": doc.checked_out_by}

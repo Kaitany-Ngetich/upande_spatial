@@ -1,0 +1,50 @@
+[
+ {
+  "description": "EPANET water-network hydraulic simulation - junctions, pipes, tanks, pumps, valves as Spatial Features, EPA's open-source EPANET engine for the solve.",
+  "docstatus": 0,
+  "doctype": "Map Viewer Plugin",
+  "enabled": 1,
+  "icon": "fa-solid fa-droplet",
+  "modified": "2026-09-10 06:58:32.283416",
+  "name": "EPANET",
+  "script_url": "/assets/upande_spatial/js/plugins/epanet-plugin.js",
+  "sort_order": 0,
+  "title": "EPANET"
+ },
+ {
+  "description": "Difference/Symmetric Difference overlay ops, geometry validation and repair (self-intersections, unclosed rings, duplicate vertices).",
+  "docstatus": 0,
+  "doctype": "Map Viewer Plugin",
+  "enabled": 1,
+  "icon": "fa-solid fa-shapes",
+  "modified": "2026-09-15 00:00:00.000000",
+  "name": "Geometry Tools",
+  "script_url": "/assets/upande_spatial/js/plugins/geometry-tools-plugin.js",
+  "sort_order": 10,
+  "title": "Geometry Tools"
+ },
+ {
+  "description": "Click/box/polygon/radius selection across loaded features, with buffer/export/delete/merge run on the current selection.",
+  "docstatus": 0,
+  "doctype": "Map Viewer Plugin",
+  "enabled": 1,
+  "icon": "fa-solid fa-object-ungroup",
+  "modified": "2026-09-15 00:00:00.000000",
+  "name": "Selection Tools",
+  "script_url": "/assets/upande_spatial/js/plugins/selection-plugin.js",
+  "sort_order": 20,
+  "title": "Selection Tools"
+ },
+ {
+  "description": "Click-to-coordinate, coordinate-to-zoom, and Decimal Degrees / DMS / UTM format conversion.",
+  "docstatus": 0,
+  "doctype": "Map Viewer Plugin",
+  "enabled": 1,
+  "icon": "fa-solid fa-location-crosshairs",
+  "modified": "2026-09-15 00:00:00.000000",
+  "name": "Coordinate Tools",
+  "script_url": "/assets/upande_spatial/js/plugins/coordinate-tools-plugin.js",
+  "sort_order": 30,
+  "title": "Coordinate Tools"
+ }
+]
