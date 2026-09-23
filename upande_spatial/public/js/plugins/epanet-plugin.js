@@ -17,6 +17,18 @@ let lastResult = null;
 let currentNetwork = null;
 let placement = null; // {kind:'node'|'link', role, clicks:[[lon,lat],...]}
 let mapClickBound = false;
+let mapMoveBound = false;
+
+// Mirrors api/epanet.py's SNAP_TOLERANCE_M - a link endpoint drawn within
+// this real-world distance of an existing node highlights that node (a
+// dashed ring) before the click lands, and the click then uses the node's
+// EXACT coordinate rather than wherever the cursor happened to be. That
+// makes the connection topologically exact at creation time instead of
+// relying on run_simulation's silent best-effort snap to catch it later.
+const SNAP_TOLERANCE_M = 5;
+let cachedNodes = [];   // [{name, role, title, latlng}] - refreshed alongside the element list
+let snapMarker = null;  // the highlight ring layer, when a snap target is active
+let snapTarget = null;  // {name, title, latlng} the next link-endpoint click will snap to
 
 // Sequential 4-stop ramp reusing the app's own palette (blue -> green ->
 // amber -> red) instead of a foreign one - low values read as "calm", high
@@ -100,17 +112,62 @@ function ensureMapClickHandler(api){
   api.getMap().on("click", onMapClickForPlacement);
 }
 
+// Live snap preview - only meaningful for link endpoints (a brand-new node
+// placement has nothing to snap to). Runs on every mousemove but is a no-op
+// unless a link placement is in progress, mirroring how onMapClickForPlacement
+// already gates itself on `placement` being set.
+function ensureMapMoveHandler(api){
+  if(mapMoveBound) return;
+  mapMoveBound = true;
+  api.getMap().on("mousemove", (e)=>onMapMoveForSnap(e, api));
+}
+
+function clearSnapMarker(api){
+  const map = api.getMap();
+  if(snapMarker && map) map.removeLayer(snapMarker);
+  snapMarker = null;
+  snapTarget = null;
+}
+
+function onMapMoveForSnap(e, api){
+  if(!placement || placement.kind !== "link" || !cachedNodes.length){
+    if(snapMarker) clearSnapMarker(api);
+    return;
+  }
+  const map = api.getMap();
+  let nearest = null, nearestD = null;
+  for(const node of cachedNodes){
+    const d = map.distance(e.latlng, node.latlng);
+    if(nearestD === null || d < nearestD){ nearest = node; nearestD = d; }
+  }
+  if(nearest && nearestD <= SNAP_TOLERANCE_M){
+    snapTarget = nearest;
+    if(!snapMarker){
+      snapMarker = L.circleMarker(nearest.latlng, {radius:13, color:"#228883", weight:2.5, fill:false, dashArray:"3,3", interactive:false}).addTo(map);
+    } else {
+      snapMarker.setLatLng(nearest.latlng);
+    }
+  } else if(snapMarker){
+    clearSnapMarker(api);
+  }
+}
+
 async function onMapClickForPlacement(e){
   if(!placement) return;
   const api = window.MapViewer;
-  placement.clicks.push([e.latlng.lng, e.latlng.lat]);
+  const snapped = placement.kind === "link" ? snapTarget : null;
+  const coord = snapped ? [snapped.latlng.lng, snapped.latlng.lat] : [e.latlng.lng, e.latlng.lat];
+  clearSnapMarker(api);
+  placement.clicks.push(coord);
   if(placement.kind === "node"){
     await openPropertyModal(api, placement.role, async (props)=>{
       await createElement(api, placement.role, {type:"Point", coordinates: placement.clicks[0]}, props);
     });
     placement = null;
   } else if(placement.clicks.length < 2){
-    api.toast("Now click the "+placement.role.toLowerCase()+"'s end point (near the far node).");
+    api.toast(snapped
+      ? `Snapped to ${snapped.title}. Now click the ${placement.role.toLowerCase()}'s end point.`
+      : "Now click the "+placement.role.toLowerCase()+"'s end point (near the far node).");
   } else {
     await openPropertyModal(api, placement.role, async (props)=>{
       await createElement(api, placement.role, {type:"LineString", coordinates: placement.clicks.slice()}, props);
@@ -122,6 +179,7 @@ async function onMapClickForPlacement(e){
 function startPlacement(api, kind, role){
   placement = {kind, role, clicks: []};
   ensureMapClickHandler(api);
+  ensureMapMoveHandler(api);
   api.toast(kind==="node"
     ? `Click the map to place the new ${role}.`
     : `Click the ${role}'s start point (at/near an existing node), then its end point.`);
@@ -176,6 +234,13 @@ async function refreshElementList(api){
   if(!listEl || !currentNetwork) return;
   const fc = await api.callMethod(API_EPANET+"get_network_geojson", {network: currentNetwork});
   const feats = fc.features || [];
+  cachedNodes = feats
+    .filter(f=>NODE_ROLES.includes(f.properties._feature_role) && f.geometry && f.geometry.type === "Point")
+    .map(f=>({
+      name: f.properties._spatial_feature_name,
+      title: f.properties._title || f.properties._spatial_feature_name,
+      latlng: L.latLng(f.geometry.coordinates[1], f.geometry.coordinates[0]),
+    }));
   const counts = {};
   feats.forEach(f=>{ const r = f.properties._feature_role; counts[r] = (counts[r]||0)+1; });
   if(hintEl) hintEl.textContent = `Junctions ${counts.Junction||0} · Tanks ${counts.Tank||0} · Reservoirs ${counts.Reservoir||0} · Pipes ${counts.Pipe||0} · Pumps ${counts.Pump||0} · Valves ${counts.Valve||0}`;
@@ -375,6 +440,8 @@ function renderPanel(container, api){
     colorByRow.style.display = "none";
     legendEl.innerHTML = "";
     clearResultLayer(api);
+    clearSnapMarker(api);
+    cachedNodes = [];
     if(has) refreshElementList(api);
   }
 
