@@ -151,7 +151,9 @@ def add_element(network, feature_role, geometry, title=None, properties=None):
 	doc.source_module = "Map Viewer EPANET Plugin"
 	if title:
 		doc.title = title
-	layer_name, _color, _marker_icon = _resolve_layer_name("EPANET Network", feature_role, geometry_type)
+	layer_name, _color, _marker_icon, _line_width, _fill_opacity = _resolve_layer_name(
+		"EPANET Network", feature_role, geometry_type
+	)
 	doc.layer = layer_name
 	# No ignore_permissions, same reasoning as upsert_feature: a real
 	# user's own Spatial Feature create rights apply here too.
