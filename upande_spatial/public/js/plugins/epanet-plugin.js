@@ -508,15 +508,36 @@ function renderResult(result, api, resultEl){
 }
 
 // ─────────────────────────────  Panel ─────────────────────────────
+// A farm's own pipe network is just an EPANET Network with its `farm`
+// field set - every element underneath it is scoped to that one network
+// (never mixed with another farm's), so simulations are already fully
+// independent per farm. What these two helpers add is UI scoping: don't
+// make someone hunt through every other farm's networks too.
+function currentGlobalFarm(){
+  const el = document.getElementById("farmFilter");
+  return el ? el.value : "";
+}
+
+function farmOptionsHtml(api){
+  const src = document.getElementById("farmFilter");
+  const farmOpts = src ? Array.from(src.options).filter(o=>o.value) : [];
+  const active = currentGlobalFarm();
+  return `<option value="" ${active?"":"selected"}>No specific farm</option>`
+    + farmOpts.map(o=>`<option value="${api.escHtml(o.value)}" ${o.value===active?"selected":""}>${api.escHtml(o.textContent)}</option>`).join("");
+}
+
 async function refreshNetworks(api, selectEl){
   const networks = await api.callMethod(API_EPANET+"list_networks", {});
-  selectEl.innerHTML = networks.length
-    ? networks.map(n=>{
+  const activeFarm = currentGlobalFarm();
+  const visible = activeFarm ? networks.filter(n=>!n.farm || n.farm===activeFarm) : networks;
+  selectEl.innerHTML = visible.length
+    ? visible.map(n=>{
         const total = Object.values(n.element_counts||{}).reduce((a,b)=>a+b,0);
-        return `<option value="${api.escHtml(n.name)}">${api.escHtml(n.network_name)} (${total} elements)</option>`;
+        const farmTag = n.farm ? ` — ${n.farm}` : "";
+        return `<option value="${api.escHtml(n.name)}">${api.escHtml(n.network_name)}${api.escHtml(farmTag)} (${total} elements)</option>`;
       }).join("")
     : '<option value="">No networks yet - create one below</option>';
-  return networks;
+  return visible;
 }
 
 function renderPanel(container, api){
@@ -524,6 +545,9 @@ function renderPanel(container, api){
     <div class="field-row">
       <div class="field" style="flex:1"><label>Network</label><select id="epanetNetworkSelect"></select></div>
       <div class="field" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn btn-sm" id="epanetOptionsBtn" title="Network options (Hydraulics, Time, Quality, Energy, Reactions)" disabled><i class="fa-solid fa-sliders"></i></button></div>
+    </div>
+    <div class="field-row" style="margin-bottom:6px">
+      <div class="field" style="flex:1"><label>New network's farm</label><select id="epanetNewFarm">${farmOptionsHtml(api)}</select></div>
     </div>
     <div style="display:flex;gap:7px;margin-bottom:10px">
       <input type="text" id="epanetNewName" placeholder="New network name" style="flex:1;font-size:12.5px;padding:7px 9px;border:1px solid var(--hairline);border-radius:var(--radius-sm);background:var(--surface);color:var(--ink-3)">
@@ -613,12 +637,27 @@ function renderPanel(container, api){
     if(networks.length) onNetworkChange(networks);
   });
 
+  // The map's global farm filter re-scopes which networks show up here too -
+  // this listener is added once (renderPanel only runs once, at plugin
+  // activation) and just keeps living alongside the global select for the
+  // rest of the page's life.
+  const globalFarmFilter = document.getElementById("farmFilter");
+  if(globalFarmFilter){
+    globalFarmFilter.addEventListener("change", async ()=>{
+      const networks = await refreshNetworks(api, sel);
+      const stillVisible = networks.some(n=>n.name===currentNetwork);
+      if(!stillVisible) onNetworkChange(networks);
+      container.querySelector("#epanetNewFarm").innerHTML = farmOptionsHtml(api);
+    });
+  }
+
   container.querySelector("#epanetCreateBtn").addEventListener("click", async ()=>{
     const nameInput = container.querySelector("#epanetNewName");
+    const farmSel = container.querySelector("#epanetNewFarm");
     const name = nameInput.value.trim();
     if(!name) return;
     try{
-      await api.callMethod(API_EPANET+"create_network", {network_name: name});
+      await api.callMethod(API_EPANET+"create_network", {network_name: name, farm: farmSel.value || undefined});
       api.toast("Network created — add its elements below.");
       nameInput.value = "";
       const networks = await refreshNetworks(api, sel);
