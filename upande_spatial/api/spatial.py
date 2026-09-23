@@ -88,16 +88,22 @@ def _resolve_layer_name(reference_doctype, feature_role, geometry_type):
 	Spatial Entity Config / Spatial Entity Allowed Geometry row that
 	_validate_against_config above matches on (reference_doctype +
 	geometry_type + feature_role, blank feature_role on the config row
-	meaning "any role"). Returns a (layer_name, color, marker_icon,
-	line_width, fill_opacity) tuple.
+	meaning "any role"). Returns a dict - deliberately not a positional
+	tuple, since a positional tuple that grows (as this one already has
+	twice) silently breaks every caller that doesn't get updated in the
+	same change; a dict lets a new key show up without touching existing
+	unpacking at every call site.
 
-	Falls back to (reference_doctype, None, None, None, None) — or
-	("Uncategorized", None, None, None, None) when there's no
-	reference_doctype at all — whenever there's no Spatial Entity Config row
+	Falls back to {"layer_name": reference_doctype or "Uncategorized",
+	everything else None} whenever there's no Spatial Entity Config row
 	for this doctype, no matching allowed_geometries row, or the matching
 	row exists but its layer_name is blank (a combo that's allowed but not
 	assigned to a specific layer)."""
-	fallback = (reference_doctype or _("Uncategorized"), None, None, None, None)
+	fallback = {
+		"layer_name": reference_doctype or _("Uncategorized"),
+		"color": None, "marker_icon": None, "line_width": None, "fill_opacity": None,
+		"color_mode": None, "color_by_property": None,
+	}
 	if not reference_doctype:
 		return fallback
 	if not frappe.db.exists("Spatial Entity Config", reference_doctype):
@@ -112,7 +118,15 @@ def _resolve_layer_name(reference_doctype, feature_role, geometry_type):
 		role_matches = (not row.feature_role) or row.feature_role == role
 		if row.geometry_type == geometry_type and role_matches:
 			if row.layer_name:
-				return (row.layer_name, row.color, row.marker_icon, row.line_width or None, row.fill_opacity if row.fill_opacity else None)
+				return {
+					"layer_name": row.layer_name,
+					"color": row.color,
+					"marker_icon": row.marker_icon,
+					"line_width": row.line_width or None,
+					"fill_opacity": row.fill_opacity if row.fill_opacity else None,
+					"color_mode": row.color_mode or None,
+					"color_by_property": row.color_by_property or None,
+				}
 			return fallback
 
 	return fallback
@@ -212,8 +226,7 @@ def upsert_feature(
 	if notes is not None:
 		doc.notes = notes
 
-	layer_name, _color, _marker_icon, _line_width, _fill_opacity = _resolve_layer_name(reference_doctype, feature_role, geometry_type)
-	doc.layer = layer_name
+	doc.layer = _resolve_layer_name(reference_doctype, feature_role, geometry_type)["layer_name"]
 
 	# Feature check-out/locking (see checkout_feature/release_feature below):
 	# a feature someone else has checked out refuses edits from anybody but
@@ -349,7 +362,7 @@ def get_features_geojson(farm=None, reference_doctype=None, feature_role=None, s
 		filters=filters,
 		fields=[
 			"name", "title", "geometry", "farm", "feature_role", "geometry_type", "layer",
-			"reference_doctype", "reference_name", "properties",
+			"reference_doctype", "reference_name", "properties", "area_sq_m", "length_m",
 		],
 		limit_page_length=0,
 	)
@@ -362,11 +375,19 @@ def get_features_geojson(farm=None, reference_doctype=None, feature_role=None, s
 			parsed = json.loads(r.geometry)
 		except Exception:
 			continue
-		_layer_name, color, marker_icon, line_width, fill_opacity = _resolve_layer_name(
-			r.reference_doctype, r.feature_role, r.geometry_type
-		)
+		layer_cfg = _resolve_layer_name(r.reference_doctype, r.feature_role, r.geometry_type)
+		try:
+			custom_props = json.loads(r.properties) if r.properties else {}
+		except Exception:
+			custom_props = {}
 		for f in parsed.get("features", []):
 			f.setdefault("properties", {})
+			# Each Spatial Feature's own free-form attributes (elevation_m,
+			# base_demand_lps, whatever a module attached) first, so the
+			# reserved _-prefixed/color keys below always win on any
+			# accidental name collision rather than getting clobbered by it.
+			if isinstance(custom_props, dict):
+				f["properties"].update(custom_props)
 			f["properties"]["_spatial_feature_name"] = r.name
 			f["properties"]["_title"] = r.title
 			f["properties"]["_farm"] = r.farm
@@ -374,10 +395,14 @@ def get_features_geojson(farm=None, reference_doctype=None, feature_role=None, s
 			f["properties"]["_reference_doctype"] = r.reference_doctype
 			f["properties"]["_reference_name"] = r.reference_name
 			f["properties"]["_layer"] = r.layer
-			f["properties"]["color"] = color
-			f["properties"]["marker_icon"] = marker_icon
-			f["properties"]["line_width"] = line_width
-			f["properties"]["fill_opacity"] = fill_opacity
+			f["properties"]["_area_sq_m"] = r.area_sq_m
+			f["properties"]["_length_m"] = r.length_m
+			f["properties"]["color"] = layer_cfg["color"]
+			f["properties"]["marker_icon"] = layer_cfg["marker_icon"]
+			f["properties"]["line_width"] = layer_cfg["line_width"]
+			f["properties"]["fill_opacity"] = layer_cfg["fill_opacity"]
+			f["properties"]["color_mode"] = layer_cfg["color_mode"]
+			f["properties"]["color_by_property"] = layer_cfg["color_by_property"]
 			features.append(f)
 
 	return {"type": "FeatureCollection", "features": features}
@@ -731,6 +756,8 @@ def get_layer_properties(layer_name):
 					"marker_icon": row.marker_icon,
 					"line_width": row.line_width or None,
 					"fill_opacity": row.fill_opacity if row.fill_opacity else None,
+					"color_mode": row.color_mode or None,
+					"color_by_property": row.color_by_property or None,
 				})
 	return {
 		"layer_name": layer_name,
@@ -740,11 +767,17 @@ def get_layer_properties(layer_name):
 
 
 @frappe.whitelist()
-def update_layer_properties(layer_name, color=None, marker_icon=None, line_width=None, fill_opacity=None):
-	"""Applies color/marker_icon/line_width/fill_opacity to every Spatial
-	Entity Config row using this layer_name, keeping them all consistent -
-	see get_layer_properties for why there can be more than one. None means
-	"leave as-is" for that field, same convention as upsert_feature."""
+def update_layer_properties(
+	layer_name, color=None, marker_icon=None, line_width=None, fill_opacity=None,
+	color_mode=None, color_by_property=None,
+):
+	"""Applies color/marker_icon/line_width/fill_opacity/color_mode/
+	color_by_property to every Spatial Entity Config row using this
+	layer_name, keeping them all consistent - see get_layer_properties for
+	why there can be more than one. None means "leave as-is" for that
+	field, same convention as upsert_feature - pass an empty string for
+	color_by_property (not None) to explicitly clear it, e.g. when
+	switching back to Fixed color mode."""
 	updated = 0
 	for cfg_name in frappe.get_all("Spatial Entity Config", pluck="name"):
 		cfg = frappe.get_doc("Spatial Entity Config", cfg_name)
@@ -763,6 +796,12 @@ def update_layer_properties(layer_name, color=None, marker_icon=None, line_width
 				changed = True
 			if fill_opacity is not None:
 				row.fill_opacity = flt(fill_opacity)
+				changed = True
+			if color_mode is not None:
+				row.color_mode = color_mode
+				changed = True
+			if color_by_property is not None:
+				row.color_by_property = color_by_property
 				changed = True
 		if changed:
 			cfg.save()

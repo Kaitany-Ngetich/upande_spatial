@@ -9,6 +9,8 @@
   "feature_role",
   "layer_name",
   "color",
+  "color_mode",
+  "color_by_property",
   "marker_icon",
   "line_width",
   "fill_opacity"
@@ -37,10 +39,25 @@
    "label": "Layer Name"
   },
   {
-   "description": "Map styling color for this layer.",
+   "description": "Map styling color for this layer. Used as-is when Color Mode is Fixed; ignored (replaced by a gradient) when By Property.",
    "fieldname": "color",
    "fieldtype": "Color",
    "label": "Color"
+  },
+  {
+   "default": "Fixed",
+   "description": "Fixed: every feature uses the Color above. By Property: each feature is colored on a gradient by one of its own numeric properties (e.g. area_sq_m) instead.",
+   "fieldname": "color_mode",
+   "fieldtype": "Select",
+   "label": "Color Mode",
+   "options": "Fixed\nBy Property"
+  },
+  {
+   "depends_on": "eval:doc.color_mode==\"By Property\"",
+   "description": "Numeric properties key to color by (from each feature's properties JSON).",
+   "fieldname": "color_by_property",
+   "fieldtype": "Data",
+   "label": "Color By Property"
   },
   {
    "description": "Font Awesome 6 solid icon name (e.g. \"map-pin\", \"water\", \"warehouse\") for point-geometry layers. Blank/unused for lines and polygons.",
