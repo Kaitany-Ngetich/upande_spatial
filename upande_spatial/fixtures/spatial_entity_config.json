@@ -6,13 +6,15 @@
     "feature_role": "Boundary",
     "geometry_type": "Polygon",
     "layer_name": "Farm Boundary",
-    "marker_icon": null
+    "marker_icon": null,
+    "color_mode": "Fixed",
+    "color_by_property": ""
    }
   ],
   "description": null,
   "docstatus": 0,
   "doctype": "Spatial Entity Config",
-  "modified": "2026-09-10 08:04:17.403091",
+  "modified": "2026-09-23 21:10:33.079930",
   "name": "Farm",
   "reference_doctype": "Farm"
  },
@@ -23,7 +25,9 @@
     "feature_role": "Location",
     "geometry_type": "Point",
     "layer_name": "Warehouse",
-    "marker_icon": "warehouse"
+    "marker_icon": "warehouse",
+    "color_mode": "Fixed",
+    "color_by_property": null
    }
   ],
   "description": null,
@@ -40,7 +44,9 @@
     "feature_role": "Boundary",
     "geometry_type": "Polygon",
     "layer_name": "Farm Blocks",
-    "marker_icon": null
+    "marker_icon": null,
+    "color_mode": "Fixed",
+    "color_by_property": null
    }
   ],
   "description": "Farm Block boundary - Farm Block itself carries no geometry field, the boundary is stored externally as a Spatial Feature keyed to it.",
@@ -57,7 +63,9 @@
     "feature_role": "Location",
     "geometry_type": "Point",
     "layer_name": "Water Pump",
-    "marker_icon": "faucet-drip"
+    "marker_icon": "faucet-drip",
+    "color_mode": "Fixed",
+    "color_by_property": null
    }
   ],
   "description": "Irrigation infrastructure (tanks/valves) - Tank And Valve already carries its own location_geojson field, this config just registers it in the central catalog so it's discoverable alongside every other spatial asset.",
@@ -74,14 +82,18 @@
     "feature_role": "Location",
     "geometry_type": "Point",
     "layer_name": "Site",
-    "marker_icon": "location-dot"
+    "marker_icon": "location-dot",
+    "color_mode": "Fixed",
+    "color_by_property": null
    },
    {
     "color": "#534AB7",
     "feature_role": "Boundary",
     "geometry_type": "Polygon",
     "layer_name": "Site Boundary",
-    "marker_icon": null
+    "marker_icon": null,
+    "color_mode": "Fixed",
+    "color_by_property": null
    }
   ],
   "description": "Core ERPNext Location (Assets module) - tree-structured land/plot records. Location already carries its own Geolocation field; this config registers it in the central catalog too, same pattern as Farm and Tank And Valve, so it's queryable alongside every other spatial asset rather than only reachable through its own doctype.",
@@ -98,42 +110,54 @@
     "feature_role": "Junction",
     "geometry_type": "Point",
     "layer_name": "EPANET Junctions",
-    "marker_icon": "circle-dot"
+    "marker_icon": "circle-dot",
+    "color_mode": "Fixed",
+    "color_by_property": null
    },
    {
     "color": "#228883",
     "feature_role": "Reservoir",
     "geometry_type": "Point",
     "layer_name": "EPANET Reservoirs",
-    "marker_icon": "water"
+    "marker_icon": "water",
+    "color_mode": "Fixed",
+    "color_by_property": null
    },
    {
     "color": "#854F0B",
     "feature_role": "Tank",
     "geometry_type": "Point",
     "layer_name": "EPANET Tanks",
-    "marker_icon": "box-archive"
+    "marker_icon": "box-archive",
+    "color_mode": "Fixed",
+    "color_by_property": null
    },
    {
     "color": "#3B6D11",
     "feature_role": "Pipe",
     "geometry_type": "LineString",
     "layer_name": "EPANET Pipes",
-    "marker_icon": null
+    "marker_icon": null,
+    "color_mode": "Fixed",
+    "color_by_property": null
    },
    {
     "color": "#b3261e",
     "feature_role": "Pump",
     "geometry_type": "LineString",
     "layer_name": "EPANET Pumps",
-    "marker_icon": null
+    "marker_icon": null,
+    "color_mode": "Fixed",
+    "color_by_property": null
    },
    {
     "color": "#534AB7",
     "feature_role": "Valve",
     "geometry_type": "LineString",
     "layer_name": "EPANET Valves",
-    "marker_icon": null
+    "marker_icon": null,
+    "color_mode": "Fixed",
+    "color_by_property": null
    }
   ],
   "description": "Water network elements for the Map Viewer EPANET plugin - hydraulic attributes (elevation, diameter, demand, ...) live in each Spatial Feature's own properties JSON rather than dedicated fields here.",
