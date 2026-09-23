@@ -133,6 +133,13 @@ def get_feature_stats(layer_names, farm=None, has_crs_column=False):
 	where_clause = " AND ".join(conditions)
 
 	crs_select = "MAX(crs) AS crs" if has_crs_column else "NULL AS crs"
+	# GROUP_CONCAT is MariaDB-only; Postgres's equivalent is STRING_AGG and
+	# requires an explicit separator argument (no implicit default).
+	group_concat = (
+		"STRING_AGG(DISTINCT NULLIF(source_module, ''), ',')"
+		if frappe.db.db_type == "postgres"
+		else "GROUP_CONCAT(DISTINCT NULLIF(source_module, ''))"
+	)
 
 	rows = frappe.db.sql(
 		f"""
@@ -141,7 +148,7 @@ def get_feature_stats(layer_names, farm=None, has_crs_column=False):
 			COUNT(name) AS feature_count,
 			COUNT(DISTINCT CASE WHEN farm IS NOT NULL AND farm != '' THEN farm END) AS farms_covered,
 			MAX(modified) AS last_updated,
-			GROUP_CONCAT(DISTINCT NULLIF(source_module, '')) AS source_modules,
+			{group_concat} AS source_modules,
 			{crs_select}
 		FROM `tabSpatial Feature`
 		WHERE {where_clause}
