@@ -277,7 +277,7 @@ fixtures = [
 		"dt": "Spatial Entity Config",
 	},
 	{
-		# Spatial Studio — the full-bleed Leaflet dashboard (layers, query,
+		# Map Viewer — the full-bleed Leaflet dashboard (layers, query,
 		# draw/edit, import/export, spatial analysis, sharing) built as a
 		# single Web Page with no build step, same pattern as
 		# upande_security's patrol-map/security-dashboard Web Pages. Filtered
@@ -285,7 +285,24 @@ fixtures = [
 		# ships every other app's public Web Pages under this app's name.
 		"dt": "Web Page",
 		"filters": [
-			["route", "=", "spatial-studio"],
+			["route", "=", "map-viewer"],
+		],
+	},
+	{
+		# The plugin toolbar itself - which plugins Map Viewer loads and in
+		# what order. A handful of rows at most, same "export all of them"
+		# treatment as Spatial Entity Config above.
+		"dt": "Map Viewer Plugin",
+	},
+	{
+		# Spatial Data Catalog — the read-only Script Report inventorying
+		# every spatial layer in the system. Filtered by name, not swept up
+		# by `dt`, same reasoning as the Web Page entry above: a fresh site
+		# install must not ship every other app's Reports under this app's
+		# name.
+		"dt": "Report",
+		"filters": [
+			["name", "=", "Spatial Data Catalog"],
 		],
 	},
 ]

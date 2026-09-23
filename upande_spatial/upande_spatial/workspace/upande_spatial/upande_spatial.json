@@ -1,8 +1,8 @@
 {
  "app": "upande_spatial",
  "charts": [],
- "content": "[\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"<span class=\\\"h4\\\"><b>Upande Spatial</b></span>\"\n  },\n  \"id\": \"header\",\n  \"type\": \"header\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"Shared spatial data module \\u2014 one place for geometry (points/lines/polygons) referenced by other doctypes (Farm, Warehouse, Guard Device Token, ...) rather than each module storing its own.\"\n  },\n  \"id\": \"para\",\n  \"type\": \"paragraph\"\n },\n {\n  \"data\": {\n   \"col\": 12,\n   \"text\": \"Shortcuts\"\n  },\n  \"id\": \"shortcuts_header\",\n  \"type\": \"header\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Spatial Feature\"\n  },\n  \"id\": \"shortcuts\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Spatial Entity Config\"\n  },\n  \"id\": \"shortcuts2\",\n  \"type\": \"shortcut\"\n },\n {\n  \"data\": {\n   \"col\": 3,\n   \"shortcut_name\": \"Spatial Studio\"\n  },\n  \"id\": \"shortcuts3\",\n  \"type\": \"shortcut\"\n }\n]",
- "creation": "2026-08-21 15:40:56.292940",
+ "content": "[{\"data\": {\"col\": 12, \"text\": \"<span class=\\\"h4\\\"><b>Upande Spatial</b></span>\"}, \"id\": \"header\", \"type\": \"header\"}, {\"data\": {\"col\": 12, \"text\": \"Shared spatial data module \\u2014 one place for geometry (points/lines/polygons) referenced by other doctypes (Farm, Warehouse, Guard Device Token, ...) rather than each module storing its own.\"}, \"id\": \"para\", \"type\": \"paragraph\"}, {\"data\": {\"col\": 12, \"text\": \"Shortcuts\"}, \"id\": \"shortcuts_header\", \"type\": \"header\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Spatial Feature\"}, \"id\": \"shortcuts\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Spatial Entity Config\"}, \"id\": \"shortcuts2\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Map Viewer\"}, \"id\": \"shortcuts3\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Map Viewer Plugins\"}, \"id\": \"shortcuts4\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Spatial Data Catalog\"}, \"id\": \"shortcuts5\", \"type\": \"shortcut\"}]",
+ "creation": "2026-09-02 15:45:43.163663",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -14,7 +14,7 @@
  "label": "Upande Spatial",
  "link_type": "DocType",
  "links": [],
- "modified": "2026-08-21 15:40:56.292940",
+ "modified": "2026-09-15 10:54:02.619648",
  "modified_by": "Administrator",
  "module": "Upande Spatial",
  "name": "Upande Spatial",
@@ -40,9 +40,23 @@
   },
   {
    "color": "Blue",
-   "label": "Spatial Studio",
+   "doc_view": "",
+   "label": "Map Viewer",
    "type": "URL",
-   "url": "/spatial-studio"
+   "url": "/map-viewer"
+  },
+  {
+   "doc_view": "List",
+   "label": "Map Viewer Plugins",
+   "link_to": "Map Viewer Plugin",
+   "type": "DocType"
+  },
+  {
+   "doc_view": "",
+   "label": "Spatial Data Catalog",
+   "link_to": "Spatial Data Catalog",
+   "report_ref_doctype": "Spatial Feature",
+   "type": "Report"
   }
  ],
  "title": "Upande Spatial",
