@@ -508,33 +508,61 @@ function renderResult(result, api, resultEl){
 }
 
 // ─────────────────────────────  Panel ─────────────────────────────
-// A farm's own pipe network is just an EPANET Network with its `farm`
-// field set - every element underneath it is scoped to that one network
-// (never mixed with another farm's), so simulations are already fully
-// independent per farm. What these two helpers add is UI scoping: don't
-// make someone hunt through every other farm's networks too.
+// A network's "owner" is a Dynamic Link (reference_doctype/reference_name),
+// same pattern Spatial Feature itself already uses - a network can belong
+// to a Farm, a Warehouse, a Location, or anything else registered in
+// Spatial Entity Config, or nothing at all. Not hardcoded to farms: the
+// map's global farm filter (Farm-only, a pre-existing app-wide concept)
+// only ever narrows Farm-owned networks - every other owner type, and
+// every unowned network, always stays visible regardless of it.
+let ownerDoctypeOptions = null; // cached - doesn't change during a session
+
 function currentGlobalFarm(){
   const el = document.getElementById("farmFilter");
   return el ? el.value : "";
 }
 
-function farmOptionsHtml(api){
-  const src = document.getElementById("farmFilter");
-  const farmOpts = src ? Array.from(src.options).filter(o=>o.value) : [];
-  const active = currentGlobalFarm();
-  return `<option value="" ${active?"":"selected"}>No specific farm</option>`
-    + farmOpts.map(o=>`<option value="${api.escHtml(o.value)}" ${o.value===active?"selected":""}>${api.escHtml(o.textContent)}</option>`).join("");
+async function getOwnerDoctypeOptions(api){
+  if(!ownerDoctypeOptions){
+    const all = await api.callMethod(API_EPANET+"list_owner_doctypes", {});
+    ownerDoctypeOptions = all.filter(d=>d!=="EPANET Network");
+  }
+  return ownerDoctypeOptions;
+}
+
+async function ownerFieldsHtml(api){
+  const doctypes = await getOwnerDoctypeOptions(api);
+  const typeOpts = '<option value="">No specific owner</option>'
+    + doctypes.map(d=>`<option value="${api.escHtml(d)}">${api.escHtml(d)}</option>`).join("");
+  return `
+    <div class="field" style="flex:1"><label>New network's owner type</label><select id="epanetNewOwnerType">${typeOpts}</select></div>
+    <div class="field" style="flex:1"><label>Owner</label><select id="epanetNewOwnerName" disabled><option value="">— pick a type first —</option></select></div>`;
+}
+
+async function refreshOwnerCandidates(api, doctype, selectEl){
+  if(!doctype){
+    selectEl.innerHTML = '<option value="">— pick a type first —</option>';
+    selectEl.disabled = true;
+    return;
+  }
+  selectEl.disabled = false;
+  const candidates = await api.callMethod(API_EPANET+"list_owner_candidates", {doctype});
+  const preselect = doctype === "Farm" ? currentGlobalFarm() : "";
+  selectEl.innerHTML = '<option value="">— none —</option>'
+    + candidates.map(c=>`<option value="${api.escHtml(c.name)}" ${c.name===preselect?"selected":""}>${api.escHtml(c.title)}</option>`).join("");
 }
 
 async function refreshNetworks(api, selectEl){
   const networks = await api.callMethod(API_EPANET+"list_networks", {});
   const activeFarm = currentGlobalFarm();
-  const visible = activeFarm ? networks.filter(n=>!n.farm || n.farm===activeFarm) : networks;
+  const visible = activeFarm
+    ? networks.filter(n=>n.reference_doctype!=="Farm" || n.reference_name===activeFarm)
+    : networks;
   selectEl.innerHTML = visible.length
     ? visible.map(n=>{
         const total = Object.values(n.element_counts||{}).reduce((a,b)=>a+b,0);
-        const farmTag = n.farm ? ` — ${n.farm}` : "";
-        return `<option value="${api.escHtml(n.name)}">${api.escHtml(n.network_name)}${api.escHtml(farmTag)} (${total} elements)</option>`;
+        const ownerTag = n.reference_name ? ` — ${n.reference_doctype}: ${n.reference_name}` : "";
+        return `<option value="${api.escHtml(n.name)}">${api.escHtml(n.network_name)}${api.escHtml(ownerTag)} (${total} elements)</option>`;
       }).join("")
     : '<option value="">No networks yet - create one below</option>';
   return visible;
@@ -546,9 +574,7 @@ function renderPanel(container, api){
       <div class="field" style="flex:1"><label>Network</label><select id="epanetNetworkSelect"></select></div>
       <div class="field" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn btn-sm" id="epanetOptionsBtn" title="Network options (Hydraulics, Time, Quality, Energy, Reactions)" disabled><i class="fa-solid fa-sliders"></i></button></div>
     </div>
-    <div class="field-row" style="margin-bottom:6px">
-      <div class="field" style="flex:1"><label>New network's farm</label><select id="epanetNewFarm">${farmOptionsHtml(api)}</select></div>
-    </div>
+    <div class="field-row" id="epanetOwnerFields" style="margin-bottom:6px"></div>
     <div style="display:flex;gap:7px;margin-bottom:10px">
       <input type="text" id="epanetNewName" placeholder="New network name" style="flex:1;font-size:12.5px;padding:7px 9px;border:1px solid var(--hairline);border-radius:var(--radius-sm);background:var(--surface);color:var(--ink-3)">
       <button class="btn btn-sm" id="epanetCreateBtn">Create</button>
@@ -637,27 +663,47 @@ function renderPanel(container, api){
     if(networks.length) onNetworkChange(networks);
   });
 
+  // Owner type/name selects are built async (list_owner_doctypes is an API
+  // call) - the field-row starts empty and fills in right after, same
+  // fire-and-forget pattern as everything else in this panel that needs a
+  // round-trip before it can render.
+  const ownerFieldsEl = container.querySelector("#epanetOwnerFields");
+  ownerFieldsHtml(api).then(html=>{
+    ownerFieldsEl.innerHTML = html;
+    const ownerTypeSel = container.querySelector("#epanetNewOwnerType");
+    const ownerNameSel = container.querySelector("#epanetNewOwnerName");
+    ownerTypeSel.addEventListener("change", ()=>refreshOwnerCandidates(api, ownerTypeSel.value, ownerNameSel));
+  });
+
   // The map's global farm filter re-scopes which networks show up here too -
   // this listener is added once (renderPanel only runs once, at plugin
   // activation) and just keeps living alongside the global select for the
-  // rest of the page's life.
+  // rest of the page's life. Only Farm-owned networks are ever narrowed by
+  // it; every other owner type (or no owner) stays visible regardless.
   const globalFarmFilter = document.getElementById("farmFilter");
   if(globalFarmFilter){
     globalFarmFilter.addEventListener("change", async ()=>{
       const networks = await refreshNetworks(api, sel);
       const stillVisible = networks.some(n=>n.name===currentNetwork);
       if(!stillVisible) onNetworkChange(networks);
-      container.querySelector("#epanetNewFarm").innerHTML = farmOptionsHtml(api);
+      const ownerTypeSel = container.querySelector("#epanetNewOwnerType");
+      const ownerNameSel = container.querySelector("#epanetNewOwnerName");
+      if(ownerTypeSel && ownerTypeSel.value === "Farm") refreshOwnerCandidates(api, "Farm", ownerNameSel);
     });
   }
 
   container.querySelector("#epanetCreateBtn").addEventListener("click", async ()=>{
     const nameInput = container.querySelector("#epanetNewName");
-    const farmSel = container.querySelector("#epanetNewFarm");
+    const ownerTypeSel = container.querySelector("#epanetNewOwnerType");
+    const ownerNameSel = container.querySelector("#epanetNewOwnerName");
     const name = nameInput.value.trim();
     if(!name) return;
     try{
-      await api.callMethod(API_EPANET+"create_network", {network_name: name, farm: farmSel.value || undefined});
+      await api.callMethod(API_EPANET+"create_network", {
+        network_name: name,
+        reference_doctype: (ownerTypeSel && ownerTypeSel.value) || undefined,
+        reference_name: (ownerNameSel && ownerNameSel.value) || undefined,
+      });
       api.toast("Network created — add its elements below.");
       nameInput.value = "";
       const networks = await refreshNetworks(api, sel);
