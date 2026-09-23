@@ -66,11 +66,172 @@ function rampCssGradient(){
 const NODE_COLOR_VARS = {
   pressure: {label:"Pressure", unit:"m",     get:(r)=>r.pressure},
   head:     {label:"Head",     unit:"m",     get:(r)=>r.head},
+  quality:  {label:"Quality",  unit:"",      get:(r)=>r.quality},
 };
 const LINK_COLOR_VARS = {
   flow:     {label:"Flow",     unit:"m³/s", get:(r)=>r.flow!=null ? Math.abs(r.flow) : null},
   velocity: {label:"Velocity", unit:"m/s",       get:(r)=>r.velocity},
 };
+
+// ─────────────────────────────  Network options ─────────────────────────────
+// Mirrors EPANET Network's Hydraulics/Time/Quality/Energy/Reactions fields
+// one-for-one - see api/epanet.py's NETWORK_OPTION_FIELDS and
+// _apply_network_options for what each one actually does to the solve.
+const OPTION_GROUPS = [
+  {
+    label: "Hydraulics",
+    fields: [
+      {key:"hyd_trials", label:"Trials", def:40},
+      {key:"hyd_accuracy", label:"Accuracy", def:0.001, step:"any"},
+      {key:"hyd_unbalanced", label:"If Unbalanced", type:"select", options:["Stop","Continue"], def:"Continue"},
+      {key:"hyd_unbalanced_trials", label:"Extra Trials Before Continuing", def:10, showIf:(v)=>v.hyd_unbalanced==="Continue"},
+      {key:"hyd_demand_model", label:"Demand Model", type:"select", options:["DDA","PDA"], def:"DDA"},
+      {key:"hyd_minimum_pressure", label:"Minimum Pressure (m)", def:0, showIf:(v)=>v.hyd_demand_model==="PDA"},
+      {key:"hyd_required_pressure", label:"Required Pressure (m)", def:0.1, showIf:(v)=>v.hyd_demand_model==="PDA"},
+    ],
+  },
+  {
+    label: "Time",
+    fields: [
+      {key:"time_duration_hours", label:"Duration (hours)", def:0, hint:"0 = a single steady-state snapshot"},
+      {key:"time_hydraulic_timestep_min", label:"Hydraulic Timestep (min)", def:60},
+      {key:"time_pattern_timestep_min", label:"Pattern Timestep (min)", def:60},
+      {key:"time_report_timestep_min", label:"Report Timestep (min)", def:60},
+      {key:"time_start_clocktime", label:"Start Clocktime", type:"time", def:"00:00"},
+    ],
+  },
+  {
+    label: "Water Quality",
+    fields: [
+      {key:"qual_mode", label:"Analysis Type", type:"select", options:["None","Chemical","Age","Trace"], def:"None"},
+      {key:"qual_chemical_name", label:"Chemical Name", type:"text", def:"", showIf:(v)=>v.qual_mode==="Chemical"},
+      {key:"qual_units", label:"Units", type:"text", def:"mg/L", showIf:(v)=>v.qual_mode==="Chemical"},
+      {key:"qual_trace_node", label:"Trace Node", type:"node-select", def:"", showIf:(v)=>v.qual_mode==="Trace"},
+    ],
+  },
+  {
+    label: "Energy",
+    fields: [
+      {key:"energy_price", label:"Global Energy Price (per kWh)", def:0, step:"any"},
+      {key:"energy_efficiency_pct", label:"Global Pump Efficiency (%)", def:75},
+    ],
+  },
+  {
+    label: "Reactions",
+    fields: [
+      {key:"react_bulk_coeff", label:"Bulk Reaction Coeff. (1/day)", def:0, step:"any"},
+      {key:"react_wall_coeff", label:"Wall Reaction Coeff. (1/day)", def:0, step:"any"},
+    ],
+  },
+];
+
+function optionFieldHtml(field, values, api){
+  const raw = values[field.key];
+  const val = (raw === undefined || raw === null || raw === "") ? field.def : raw;
+  const id = "epanetOpt_"+field.key;
+  let input;
+  if(field.type === "select"){
+    input = `<select id="${id}">${field.options.map(o=>`<option ${o===val?"selected":""}>${api.escHtml(o)}</option>`).join("")}</select>`;
+  } else if(field.type === "node-select"){
+    const opts = cachedNodes.map(n=>`<option value="${api.escHtml(n.name)}" ${n.name===val?"selected":""}>${api.escHtml(n.title)}</option>`).join("");
+    input = `<select id="${id}"><option value="">— choose a node —</option>${opts}</select>`;
+  } else if(field.type === "time"){
+    const hhmm = typeof val === "string" ? val.slice(0,5) : "00:00";
+    input = `<input type="time" id="${id}" value="${api.escHtml(hhmm)}">`;
+  } else if(field.type === "text"){
+    input = `<input type="text" id="${id}" value="${api.escHtml(val||"")}">`;
+  } else {
+    input = `<input type="number" id="${id}" value="${val}" ${field.step?`step="${field.step}"`:""}>`;
+  }
+  return `<div class="field" data-optfield="${field.key}" style="flex:1 1 220px"><label>${api.escHtml(field.label)}</label>${input}${field.hint?`<div class="hint" style="margin-top:2px">${api.escHtml(field.hint)}</div>`:""}</div>`;
+}
+
+function readOptionsForm(){
+  const out = {};
+  OPTION_GROUPS.forEach(g=>g.fields.forEach(f=>{
+    const el = document.getElementById("epanetOpt_"+f.key);
+    if(!el) return;
+    if(f.type === "select" || f.type === "node-select" || f.type === "text"){
+      out[f.key] = el.value || null;
+    } else if(f.type === "time"){
+      out[f.key] = el.value ? el.value+":00" : null;
+    } else {
+      out[f.key] = el.value === "" ? null : parseFloat(el.value);
+    }
+  }));
+  return out;
+}
+
+function currentOptionsFormValues(){
+  const vals = {};
+  OPTION_GROUPS.forEach(g=>g.fields.forEach(f=>{
+    const el = document.getElementById("epanetOpt_"+f.key);
+    if(el) vals[f.key] = el.value;
+  }));
+  return vals;
+}
+
+function updateOptionsVisibility(body){
+  const vals = currentOptionsFormValues();
+  OPTION_GROUPS.forEach(g=>g.fields.forEach(f=>{
+    if(!f.showIf) return;
+    const row = body.querySelector(`[data-optfield="${f.key}"]`);
+    if(row) row.style.display = f.showIf(vals) ? "" : "none";
+  }));
+}
+
+function openOptionsModal(api, network){
+  return new Promise(async (resolve)=>{
+    let values;
+    try{
+      values = await api.callMethod(API_EPANET+"get_network_options", {network});
+    }catch(e){
+      api.toast("Could not load options: "+e.message, true);
+      resolve(false);
+      return;
+    }
+
+    const scrim = document.createElement("div");
+    scrim.className = "modal-scrim show";
+    scrim.innerHTML = `
+      <div class="modal" style="max-width:560px">
+        <div class="modal-head"><div class="modal-title">Network Options</div><button class="float-close" id="epanetOptClose"><i class="fa-solid fa-xmark"></i></button></div>
+        <div class="modal-body" id="epanetOptBody" style="max-height:62vh;overflow-y:auto">
+          ${OPTION_GROUPS.map(g=>`
+            <div class="proc-card" style="margin-bottom:10px">
+              <h4>${api.escHtml(g.label)}</h4>
+              <div class="field-row" style="flex-wrap:wrap;row-gap:10px">
+                ${g.fields.map(f=>optionFieldHtml(f, values, api)).join("")}
+              </div>
+            </div>`).join("")}
+        </div>
+        <div class="modal-foot">
+          <button class="btn" id="epanetOptCancel">Cancel</button>
+          <button class="btn btn-primary" id="epanetOptSave">Save</button>
+        </div>
+      </div>`;
+    document.body.appendChild(scrim);
+
+    const body = scrim.querySelector("#epanetOptBody");
+    updateOptionsVisibility(body);
+    body.addEventListener("change", ()=>updateOptionsVisibility(body));
+
+    const close = ()=>{ scrim.remove(); resolve(false); };
+    scrim.querySelector("#epanetOptClose").addEventListener("click", close);
+    scrim.querySelector("#epanetOptCancel").addEventListener("click", close);
+    scrim.querySelector("#epanetOptSave").addEventListener("click", async ()=>{
+      const payload = readOptionsForm();
+      try{
+        await api.callMethod(API_EPANET+"update_network_options", {network, options: JSON.stringify(payload)});
+        api.toast("Options saved.");
+        scrim.remove();
+        resolve(true);
+      }catch(e){
+        api.toast("Could not save options: "+e.message, true);
+      }
+    });
+  });
+}
 
 // ─────────────────────────────  Property forms  ─────────────────────────────
 // Deliberately a fixed, small field set per role rather than a fully
@@ -360,9 +521,9 @@ async function refreshNetworks(api, selectEl){
 
 function renderPanel(container, api){
   container.innerHTML = `
-    <div class="field">
-      <label>Network</label>
-      <select id="epanetNetworkSelect"></select>
+    <div class="field-row">
+      <div class="field" style="flex:1"><label>Network</label><select id="epanetNetworkSelect"></select></div>
+      <div class="field" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn btn-sm" id="epanetOptionsBtn" title="Network options (Hydraulics, Time, Quality, Energy, Reactions)" disabled><i class="fa-solid fa-sliders"></i></button></div>
     </div>
     <div style="display:flex;gap:7px;margin-bottom:10px">
       <input type="text" id="epanetNewName" placeholder="New network name" style="flex:1;font-size:12.5px;padding:7px 9px;border:1px solid var(--hairline);border-radius:var(--radius-sm);background:var(--surface);color:var(--ink-3)">
@@ -390,7 +551,7 @@ function renderPanel(container, api){
       <label class="check-row" style="margin-top:8px"><input type="checkbox" id="epanetShowResults">Show results on map</label>
       <div class="field-row" id="epanetColorByRow" style="margin-top:6px;display:none">
         <div class="field"><label>Node color</label><select id="epanetNodeColorVar">
-          <option value="pressure">Pressure</option><option value="head">Head</option>
+          <option value="pressure">Pressure</option><option value="head">Head</option><option value="quality">Quality</option>
         </select></div>
         <div class="field"><label>Link color</label><select id="epanetLinkColorVar">
           <option value="flow">Flow</option><option value="velocity">Velocity</option>
@@ -402,6 +563,7 @@ function renderPanel(container, api){
   `;
 
   const sel = container.querySelector("#epanetNetworkSelect");
+  const optionsBtn = container.querySelector("#epanetOptionsBtn");
   const runBtn = container.querySelector("#epanetRunBtn");
   const placeNodeBtn = container.querySelector("#epanetPlaceNodeBtn");
   const placeLinkBtn = container.querySelector("#epanetPlaceLinkBtn");
@@ -431,6 +593,7 @@ function renderPanel(container, api){
   function onNetworkChange(networks){
     currentNetwork = sel.value;
     const has = !!currentNetwork;
+    optionsBtn.disabled = !has;
     runBtn.disabled = !has;
     placeNodeBtn.disabled = !has;
     placeLinkBtn.disabled = !has;
@@ -463,6 +626,10 @@ function renderPanel(container, api){
       if(created) sel.value = created.name;
       onNetworkChange(networks);
     }catch(e){ api.toast("Could not create network: "+e.message, true); }
+  });
+
+  optionsBtn.addEventListener("click", ()=>{
+    if(currentNetwork) openOptionsModal(api, currentNetwork);
   });
 
   placeNodeBtn.addEventListener("click", ()=>{
