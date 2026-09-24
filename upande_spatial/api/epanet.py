@@ -164,26 +164,22 @@ def _nearest_node(coord, nodes):
 
 @frappe.whitelist()
 def list_owner_doctypes():
-	"""Which doctypes an EPANET Network can be scoped to. Reuses Spatial
-	Entity Config's own registry of "what's spatially trackable" rather
-	than a second hardcoded list - a network isn't only ever a farm's
-	network; it can belong to a Warehouse, a Location, or anything else a
-	module registers there, or to nothing at all."""
-	return frappe.get_all("Spatial Entity Config", pluck="name", order_by="name")
+	"""Which doctypes an EPANET Network can be scoped to. Thin re-export -
+	this is a core "what's spatially trackable" capability, not specific
+	to EPANET, so the real implementation lives in api/spatial.py (also
+	used by the Map Viewer's own New Feature form) and this just keeps the
+	EPANET plugin's existing API_EPANET-prefixed call working unchanged."""
+	from upande_spatial.api.spatial import list_owner_doctypes as _list_owner_doctypes
+
+	return _list_owner_doctypes()
 
 
 @frappe.whitelist()
 def list_owner_candidates(doctype):
-	"""Existing records of the given owner doctype, for the network-owner
-	picker - respects the caller's own read permissions on that doctype,
-	same as any other frappe.get_all call."""
-	if not doctype or not frappe.db.exists("DocType", doctype):
-		return []
-	meta = frappe.get_meta(doctype)
-	title_field = meta.get_title_field()
-	fields = ["name"] + ([title_field] if title_field and title_field != "name" else [])
-	rows = frappe.get_all(doctype, fields=fields, limit=500, order_by="name")
-	return [{"name": r.name, "title": (r.get(title_field) if title_field else None) or r.name} for r in rows]
+	"""Thin re-export - see list_owner_doctypes above."""
+	from upande_spatial.api.spatial import list_owner_candidates as _list_owner_candidates
+
+	return _list_owner_candidates(doctype)
 
 
 @frappe.whitelist()
