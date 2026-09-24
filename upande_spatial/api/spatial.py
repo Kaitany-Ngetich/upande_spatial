@@ -492,6 +492,32 @@ def get_feature_summary(farm=None, layer=None):
 
 
 @frappe.whitelist()
+def list_owner_doctypes():
+	"""Which doctypes a Spatial Feature (or an EPANET Network, or anything
+	else that scopes itself to some owning record) can reference. Reuses
+	Spatial Entity Config's own registry of "what's spatially trackable"
+	rather than a second hardcoded list, and rather than only ever
+	offering doctypes some feature already happens to reference - a brand
+	new reference_doctype that's registered but not yet used anywhere
+	should still be pickable when creating the first feature for it."""
+	return frappe.get_all("Spatial Entity Config", pluck="name", order_by="name")
+
+
+@frappe.whitelist()
+def list_owner_candidates(doctype):
+	"""Existing records of the given owner doctype, for a reference-name
+	picker - respects the caller's own read permissions on that doctype,
+	same as any other frappe.get_all call."""
+	if not doctype or not frappe.db.exists("DocType", doctype):
+		return []
+	meta = frappe.get_meta(doctype)
+	title_field = meta.get_title_field()
+	fields = ["name"] + ([title_field] if title_field and title_field != "name" else [])
+	rows = frappe.get_all(doctype, fields=fields, limit=500, order_by="name")
+	return [{"name": r.name, "title": (r.get(title_field) if title_field else None) or r.name} for r in rows]
+
+
+@frappe.whitelist()
 def get_layers():
 	"""The distinct set of browsable map layers: every configured layer
 	(a Spatial Entity Allowed Geometry row with a non-blank layer_name,
