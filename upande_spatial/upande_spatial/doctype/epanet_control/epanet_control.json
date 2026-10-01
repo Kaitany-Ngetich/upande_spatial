@@ -1,0 +1,124 @@
+{
+ "actions": [],
+ "allow_bulk_edit": 1,
+ "allow_rename": 1,
+ "creation": "2026-09-24 08:07:44.961820",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "description",
+  "target_element",
+  "action",
+  "setting",
+  "column_break_1",
+  "trigger",
+  "clock_time",
+  "elapsed_hours",
+  "source_node",
+  "threshold"
+ ],
+ "fields": [
+  {
+   "columns": 1,
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "columns": 2,
+   "description": "The Pipe, Pump or Valve this control acts on.",
+   "fieldname": "target_element",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Link Element",
+   "options": "Spatial Feature",
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "default": "Closed",
+   "fieldname": "action",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Action",
+   "options": "Open\nClosed\nSetting",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.action=='Setting'",
+   "description": "Pump speed, or the valve's setting (pressure m for PRV/PSV/PBV, flow L/s for FCV, loss coeff. for TCV).",
+   "fieldname": "setting",
+   "fieldtype": "Float",
+   "label": "Setting"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "columns": 2,
+   "default": "At Clock Time",
+   "fieldname": "trigger",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "When",
+   "options": "At Clock Time\nAfter Elapsed Time\nNode Below\nNode Above",
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "depends_on": "eval:doc.trigger=='At Clock Time'",
+   "fieldname": "clock_time",
+   "fieldtype": "Time",
+   "in_list_view": 1,
+   "label": "Clock Time"
+  },
+  {
+   "depends_on": "eval:doc.trigger=='After Elapsed Time'",
+   "fieldname": "elapsed_hours",
+   "fieldtype": "Float",
+   "label": "Elapsed Hours"
+  },
+  {
+   "depends_on": "eval:doc.trigger=='Node Below' || doc.trigger=='Node Above'",
+   "description": "Junction (compares pressure, m) or Tank (compares water level, m).",
+   "fieldname": "source_node",
+   "fieldtype": "Link",
+   "label": "Node",
+   "options": "Spatial Feature"
+  },
+  {
+   "columns": 1,
+   "depends_on": "eval:doc.trigger=='Node Below' || doc.trigger=='Node Above'",
+   "fieldname": "threshold",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Threshold (m)"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "label": "Description",
+   "in_list_view": 0
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-01 21:02:36.189305",
+ "modified_by": "Administrator",
+ "module": "Upande Spatial",
+ "name": "EPANET Control",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -19,6 +19,7 @@
   "section_break_1",
   "warnings",
   "error",
+  "report",
   "results"
  ],
  "fields": [
@@ -96,12 +97,19 @@
    "fieldtype": "Long Text",
    "label": "Results (JSON)",
    "read_only": 1
+  },
+  {
+   "fieldname": "report",
+   "fieldtype": "Long Text",
+   "label": "EPANET Report",
+   "read_only": 1,
+   "description": "EPANET's own text report for this run, in the network's flow units"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-10 06:48:17.242318",
+ "modified": "2026-10-01 20:58:35.940629",
  "modified_by": "Administrator",
  "module": "Upande Spatial",
  "name": "EPANET Simulation Run",

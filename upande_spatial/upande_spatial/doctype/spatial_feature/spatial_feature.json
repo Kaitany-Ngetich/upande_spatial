@@ -1,7 +1,7 @@
 {
  "actions": [],
  "autoname": "format:SPF-{#####}",
- "creation": "2026-08-11 00:00:00",
+ "creation": "2026-09-23 21:12:30.665340",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -103,7 +103,6 @@
    "description": "Which app/module created this feature \u2014 e.g. \"Upande Security\". Free text, set by the creating module's API call, purely for provenance/filtering.",
    "fieldname": "source_module",
    "fieldtype": "Data",
-   "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Source Module"
   },
@@ -226,7 +225,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-15 10:50:09.887918",
+ "modified": "2026-09-24 08:26:02.169113",
  "modified_by": "Administrator",
  "module": "Upande Spatial",
  "name": "Spatial Feature",

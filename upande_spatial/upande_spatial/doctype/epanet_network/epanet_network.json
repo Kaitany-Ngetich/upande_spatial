@@ -3,7 +3,7 @@
  "allow_bulk_edit": 1,
  "allow_rename": 1,
  "autoname": "field:network_name",
- "creation": "2026-09-10 06:47:44.720724",
+ "creation": "2026-09-23 21:12:31.844687",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
@@ -15,6 +15,9 @@
   "company",
   "section_break_1",
   "description",
+  "column_break_desc1",
+  "calibration_date",
+  "calibrated_by",
   "section_break_hyd",
   "hyd_trials",
   "hyd_accuracy",
@@ -25,6 +28,15 @@
   "hyd_demand_model",
   "hyd_minimum_pressure",
   "hyd_required_pressure",
+  "column_break_hyd3",
+  "hyd_headloss",
+  "hyd_demand_multiplier",
+  "section_break_hyd_adv",
+  "hyd_flow_units",
+  "hyd_emitter_exponent",
+  "column_break_hyd4",
+  "hyd_specific_gravity",
+  "hyd_viscosity",
   "section_break_time",
   "time_duration_hours",
   "time_hydraulic_timestep_min",
@@ -33,12 +45,17 @@
   "time_report_timestep_min",
   "column_break_time2",
   "time_start_clocktime",
+  "time_quality_timestep_min",
+  "time_statistic",
   "section_break_qual",
   "qual_mode",
   "column_break_qual1",
   "qual_chemical_name",
   "qual_units",
   "qual_trace_node",
+  "column_break_qual2",
+  "qual_diffusivity",
+  "qual_tolerance",
   "section_break_energy",
   "energy_price",
   "column_break_energy1",
@@ -46,7 +63,22 @@
   "section_break_react",
   "react_bulk_coeff",
   "column_break_react1",
-  "react_wall_coeff"
+  "react_wall_coeff",
+  "column_break_react2",
+  "react_order_bulk",
+  "react_order_tank",
+  "react_order_wall",
+  "column_break_react3",
+  "react_limiting_potential",
+  "react_roughness_correlation",
+  "section_break_report",
+  "report_status",
+  "column_break_report1",
+  "report_summary",
+  "column_break_report2",
+  "report_energy",
+  "section_break_controls",
+  "controls"
  ],
  "fields": [
   {
@@ -263,7 +295,7 @@
   },
   {
    "default": "0",
-   "description": "Negative = decays, positive = grows, per day",
+   "description": "Per day (first order). Negative = decays, positive = grows. Applies to pipes and tanks without their own coefficient.",
    "fieldname": "react_bulk_coeff",
    "fieldtype": "Float",
    "label": "Bulk Reaction Coeff. (1/day)"
@@ -276,13 +308,206 @@
    "default": "0",
    "fieldname": "react_wall_coeff",
    "fieldtype": "Float",
-   "label": "Wall Reaction Coeff. (1/day)"
+   "label": "Wall Reaction Coeff.",
+   "description": "First order: m/day. Zero order: mg/m²/day. Applies to pipes without their own wall coefficient."
+  },
+  {
+   "fieldname": "column_break_hyd3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "H-W",
+   "description": "H-W: Hazen-Williams C. D-W: Darcy-Weisbach roughness in mm. C-M: Chezy-Manning n. Pipe 'roughness' is read in these units.",
+   "fieldname": "hyd_headloss",
+   "fieldtype": "Select",
+   "label": "Headloss Formula",
+   "options": "H-W\nD-W\nC-M"
+  },
+  {
+   "default": "1",
+   "fieldname": "hyd_demand_multiplier",
+   "fieldtype": "Float",
+   "label": "Demand Multiplier"
+  },
+  {
+   "description": "Simple EPANET controls - open/close or change the setting of a pipe, pump or valve at a time of day, after some hours, or when a junction's pressure / tank's level crosses a threshold.",
+   "fieldname": "section_break_controls",
+   "fieldtype": "Section Break",
+   "label": "Controls"
+  },
+  {
+   "fieldname": "controls",
+   "fieldtype": "Table",
+   "label": "Controls",
+   "options": "EPANET Control"
+  },
+  {
+   "fieldname": "section_break_hyd_adv",
+   "fieldtype": "Section Break",
+   "label": "Units & Fluid",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "hyd_flow_units",
+   "fieldtype": "Select",
+   "label": "Flow Units",
+   "options": "LPS\nLPM\nMLD\nCMH\nCFS\nGPM\nMGD\nIMGD\nAFD",
+   "default": "LPS",
+   "description": "Units for flow results on the map, the EPANET report and the exported .inp file. Element inputs on the map stay in L/s, mm and m."
+  },
+  {
+   "fieldname": "hyd_emitter_exponent",
+   "fieldtype": "Float",
+   "label": "Emitter Exponent",
+   "default": "0.5",
+   "description": "Power that pressure is raised to in emitter (leak/sprinkler) flow"
+  },
+  {
+   "fieldname": "column_break_hyd4",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "hyd_specific_gravity",
+   "fieldtype": "Float",
+   "label": "Specific Gravity",
+   "default": "1",
+   "description": "Fluid density relative to water at 4°C"
+  },
+  {
+   "fieldname": "hyd_viscosity",
+   "fieldtype": "Float",
+   "label": "Relative Viscosity",
+   "default": "1",
+   "description": "Kinematic viscosity relative to water at 20°C"
+  },
+  {
+   "fieldname": "time_quality_timestep_min",
+   "fieldtype": "Float",
+   "label": "Quality Timestep (min)",
+   "default": "5"
+  },
+  {
+   "fieldname": "time_statistic",
+   "fieldtype": "Select",
+   "label": "Statistic",
+   "options": "None\nAveraged\nMinimum\nMaximum\nRange",
+   "default": "None",
+   "description": "None reports each element at the last timestep. Otherwise the map and summary show this statistic over the whole run."
+  },
+  {
+   "fieldname": "column_break_qual2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "qual_diffusivity",
+   "fieldtype": "Float",
+   "label": "Relative Diffusivity",
+   "default": "1",
+   "description": "Chemical diffusivity relative to chlorine at 20°C. 0 ignores mass transfer limits on wall reactions."
+  },
+  {
+   "fieldname": "qual_tolerance",
+   "fieldtype": "Float",
+   "label": "Quality Tolerance",
+   "default": "0.01",
+   "description": "Smallest quality change that separates two water parcels"
+  },
+  {
+   "fieldname": "column_break_react2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "react_order_bulk",
+   "fieldtype": "Float",
+   "label": "Bulk Reaction Order",
+   "default": "1"
+  },
+  {
+   "fieldname": "react_order_tank",
+   "fieldtype": "Float",
+   "label": "Tank Reaction Order",
+   "default": "1"
+  },
+  {
+   "fieldname": "react_order_wall",
+   "fieldtype": "Select",
+   "label": "Wall Reaction Order",
+   "options": "0\n1",
+   "default": "1"
+  },
+  {
+   "fieldname": "column_break_react3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "react_limiting_potential",
+   "fieldtype": "Float",
+   "label": "Limiting Concentration",
+   "description": "Growth/decay stops at this concentration. Blank = no limit."
+  },
+  {
+   "fieldname": "react_roughness_correlation",
+   "fieldtype": "Float",
+   "label": "Roughness Correlation",
+   "description": "Makes each pipe's wall coefficient (that has none of its own) = this ÷ roughness (H-W), or this ÷ log(e/D) (D-W). Blank = off."
+  },
+  {
+   "fieldname": "section_break_report",
+   "fieldtype": "Section Break",
+   "label": "Report",
+   "collapsible": 1,
+   "description": "What goes into the EPANET text report saved on each Simulation Run"
+  },
+  {
+   "fieldname": "report_status",
+   "fieldtype": "Select",
+   "label": "Status Report",
+   "options": "No\nYes\nFull",
+   "default": "Yes",
+   "description": "Yes lists tanks filling/emptying and links opening/closing over time. Full adds solver trial details."
+  },
+  {
+   "fieldname": "column_break_report1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "report_summary",
+   "fieldtype": "Select",
+   "label": "Input Summary",
+   "options": "No\nYes",
+   "default": "Yes"
+  },
+  {
+   "fieldname": "column_break_report2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "report_energy",
+   "fieldtype": "Select",
+   "label": "Pump Energy Table",
+   "options": "No\nYes",
+   "default": "No"
+  },
+  {
+   "fieldname": "column_break_desc1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "calibration_date",
+   "fieldtype": "Date",
+   "label": "Calibration Date"
+  },
+  {
+   "fieldname": "calibrated_by",
+   "fieldtype": "Link",
+   "label": "Calibrated By",
+   "options": "User"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-10 06:47:44.720724",
+ "modified": "2026-10-01 21:02:36.189305",
  "modified_by": "Administrator",
  "module": "Upande Spatial",
  "name": "EPANET Network",
