@@ -1,0 +1,17 @@
+[general]
+name=Upande Spatial
+qgisMinimumVersion=3.34
+qgisMaximumVersion=4.99
+supportsQt6=True
+description=Load Upande ERP spatial data into QGIS, analyse it, and save edits back to ERP live.
+about=Connects to an Upande ERP site (local bench or Frappe Cloud) over its REST API with your own API key. Browse and load Upande Spatial layers, edit them with any QGIS tool - saving sends the changes to ERP immediately, with conflict detection - publish analysis results back as new spatial features, and load EPANET simulation results or .inp models.
+version=0.1.0
+author=Upande
+email=dev@upande.com
+category=Vector
+tags=erp,frappe,upande,sync,epanet,water
+experimental=True
+icon=icon.svg
+homepage=https://github.com/Kaitany-Ngetich/upande_spatial
+repository=https://github.com/Kaitany-Ngetich/upande_spatial
+tracker=https://github.com/Kaitany-Ngetich/upande_spatial/issues
