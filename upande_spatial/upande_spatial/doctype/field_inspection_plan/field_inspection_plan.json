@@ -1,0 +1,172 @@
+{
+ "actions": [],
+ "autoname": "field:plan_name",
+ "creation": "2026-10-15 16:00:00.000000",
+ "description": "A route of waypoints to inspect, once or on a schedule.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "plan_name",
+  "enabled",
+  "farm",
+  "company",
+  "column_break_1",
+  "frequency",
+  "start_date",
+  "next_run_date",
+  "default_inspector",
+  "section_break_1",
+  "checkin_radius_m",
+  "default_template",
+  "column_break_2",
+  "description",
+  "section_break_2",
+  "waypoints"
+ ],
+ "fields": [
+  {
+   "fieldname": "plan_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Plan Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "farm",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Farm",
+   "options": "Farm"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "One-off",
+   "fieldname": "frequency",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Frequency",
+   "options": "One-off\nDaily\nWeekly\nMonthly"
+  },
+  {
+   "default": "Today",
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Start Date"
+  },
+  {
+   "description": "When the scheduler creates the next run (repeating plans).",
+   "fieldname": "next_run_date",
+   "fieldtype": "Date",
+   "label": "Next Run Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "default_inspector",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Default Inspector",
+   "options": "User"
+  },
+  {
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break",
+   "label": "Field rules"
+  },
+  {
+   "default": "15",
+   "description": "An inspector can only start a waypoint's checklist within this distance of it.",
+   "fieldname": "checkin_radius_m",
+   "fieldtype": "Float",
+   "label": "Check-in Radius (m)"
+  },
+  {
+   "description": "Checklist for waypoints with no template of their own and no asset-specific template.",
+   "fieldname": "default_template",
+   "fieldtype": "Link",
+   "label": "Default Template",
+   "options": "Field Inspection Template"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "section_break_2",
+   "fieldtype": "Section Break",
+   "label": "Route"
+  },
+  {
+   "fieldname": "waypoints",
+   "fieldtype": "Table",
+   "label": "Waypoints",
+   "options": "Field Inspection Waypoint",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-15 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Upande Spatial",
+ "name": "Field Inspection Plan",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Inspection Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Field Inspector"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

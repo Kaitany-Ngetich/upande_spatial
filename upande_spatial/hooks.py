@@ -126,13 +126,17 @@ app_license = "mit"
 # -----------
 # Permissions evaluated in scripted ways
 
-# permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
-# has_permission = {
-# 	"Event": "frappe.desk.doctype.event.event.has_permission",
-# }
+# Field inspectors only see the runs (and their visits) assigned to them;
+# Inspection Managers / System Managers see all of them.
+permission_query_conditions = {
+	"Field Inspection Run": "upande_spatial.api.inspection_permissions.run_query",
+	"Field Inspection Visit": "upande_spatial.api.inspection_permissions.visit_query",
+}
+
+has_permission = {
+	"Field Inspection Run": "upande_spatial.api.inspection_permissions.has_run_permission",
+	"Field Inspection Visit": "upande_spatial.api.inspection_permissions.has_visit_permission",
+}
 
 # Document Events
 # ---------------
@@ -148,6 +152,11 @@ app_license = "mit"
 
 # Scheduled Tasks
 # ---------------
+
+scheduler_events = {
+	# Repeating Field Inspection Plans that are due get their next run.
+	"daily": ["upande_spatial.api.inspection.create_scheduled_runs"],
+}
 
 # scheduler_events = {
 # 	"all": [
@@ -290,6 +299,14 @@ fixtures = [
 		"dt": "Report",
 		"filters": [
 			["name", "=", "Spatial Data Catalog"],
+		],
+	},
+	{
+		# Field inspection roles: managers plan routes and create runs,
+		# inspectors work their own runs from the mobile app.
+		"dt": "Role",
+		"filters": [
+			["name", "in", ["Inspection Manager", "Field Inspector"]],
 		],
 	},
 ]

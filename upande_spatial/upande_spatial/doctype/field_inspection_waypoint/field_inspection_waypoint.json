@@ -1,0 +1,91 @@
+{
+ "actions": [],
+ "creation": "2026-10-15 16:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "sequence",
+  "waypoint_title",
+  "asset",
+  "template",
+  "point",
+  "latitude",
+  "longitude",
+  "instructions"
+ ],
+ "fields": [
+  {
+   "columns": 1,
+   "fieldname": "sequence",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Sequence"
+  },
+  {
+   "columns": 2,
+   "fieldname": "waypoint_title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title"
+  },
+  {
+   "columns": 2,
+   "description": "The pipe, valve, cable, pole... being inspected (optional).",
+   "fieldname": "asset",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Asset",
+   "options": "Spatial Feature"
+  },
+  {
+   "columns": 2,
+   "fieldname": "template",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Template",
+   "options": "Field Inspection Template"
+  },
+  {
+   "description": "Where to stand - a Spatial Feature (role Inspection Waypoint), created from the coordinates on save.",
+   "fieldname": "point",
+   "fieldtype": "Link",
+   "label": "Point",
+   "options": "Spatial Feature",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Latitude",
+   "precision": "8"
+  },
+  {
+   "columns": 1,
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Longitude",
+   "precision": "8"
+  },
+  {
+   "fieldname": "instructions",
+   "fieldtype": "Small Text",
+   "label": "Instructions"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-15 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Upande Spatial",
+ "name": "Field Inspection Waypoint",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
