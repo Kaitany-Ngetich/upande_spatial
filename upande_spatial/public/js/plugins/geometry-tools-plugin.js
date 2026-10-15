@@ -1,5 +1,5 @@
 // Geometry Tools plugin for Map Viewer - built against the MapViewer plugin
-// API (see the "Plugin API" section in the map-viewer Web Page's own
+// API (see the "Plugin API" section in www/map-viewer.html's
 // script, and epanet-plugin.js for the reference plugin pattern).
 //
 // Two independent cards, both under one "Geometry" dock tab:

@@ -1,0 +1,204 @@
+{
+ "actions": [],
+ "autoname": "format:FIR-{#####}",
+ "creation": "2026-10-15 16:00:00.000000",
+ "description": "One execution of a Field Inspection Plan by one inspector.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "plan",
+  "inspector",
+  "scheduled_date",
+  "status",
+  "column_break_1",
+  "farm",
+  "checkin_radius_m",
+  "started_at",
+  "finished_at",
+  "section_break_1",
+  "total_waypoints",
+  "visited",
+  "column_break_2",
+  "passed",
+  "failed",
+  "skipped",
+  "section_break_2",
+  "track",
+  "distance_walked_m",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "plan",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Plan",
+   "options": "Field Inspection Plan",
+   "reqd": 1
+  },
+  {
+   "fieldname": "inspector",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Inspector",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "scheduled_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Scheduled Date",
+   "reqd": 1
+  },
+  {
+   "default": "Planned",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Planned\nDownloaded\nIn Progress\nCompleted\nPartially Completed\nCancelled"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "plan.farm",
+   "fieldname": "farm",
+   "fieldtype": "Link",
+   "label": "Farm",
+   "options": "Farm",
+   "read_only": 1
+  },
+  {
+   "fieldname": "checkin_radius_m",
+   "fieldtype": "Float",
+   "label": "Check-in Radius (m)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Started At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "finished_at",
+   "fieldtype": "Datetime",
+   "label": "Finished At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break",
+   "label": "Progress"
+  },
+  {
+   "fieldname": "total_waypoints",
+   "fieldtype": "Int",
+   "label": "Total Waypoints",
+   "read_only": 1
+  },
+  {
+   "fieldname": "visited",
+   "fieldtype": "Int",
+   "label": "Visited",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "passed",
+   "fieldtype": "Int",
+   "label": "Passed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "failed",
+   "fieldtype": "Int",
+   "label": "Failed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "skipped",
+   "fieldtype": "Int",
+   "label": "Skipped",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_2",
+   "fieldtype": "Section Break",
+   "label": "Track"
+  },
+  {
+   "description": "GPS track walked (a LineString Spatial Feature, role GPS Track).",
+   "fieldname": "track",
+   "fieldtype": "Link",
+   "label": "Track",
+   "options": "Spatial Feature",
+   "read_only": 1
+  },
+  {
+   "fieldname": "distance_walked_m",
+   "fieldtype": "Float",
+   "label": "Distance Walked (m)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-15 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Upande Spatial",
+ "name": "Field Inspection Run",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Inspection Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Field Inspector"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "plan",
+ "track_changes": 1
+}

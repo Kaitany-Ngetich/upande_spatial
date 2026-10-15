@@ -1,5 +1,5 @@
 // Coordinate Tools plugin for Map Viewer - built against the MapViewer
-// plugin API (see the "Plugin API" section in the map-viewer Web Page's own
+// plugin API (see the "Plugin API" section in www/map-viewer.html's
 // script). Pure coordinate utilities - click-to-coordinate, coordinate-to-
 // zoom, and Decimal Degrees / DMS / UTM conversions - no Spatial Feature
 // records are created or touched by this plugin.

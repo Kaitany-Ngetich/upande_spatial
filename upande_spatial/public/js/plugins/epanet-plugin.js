@@ -1,5 +1,5 @@
 // EPANET plugin for Map Viewer - built against the MapViewer plugin API
-// (see the "Plugin API" section in the map-viewer Web Page's own script).
+// (see the "Plugin API" section in www/map-viewer.html's script).
 // Water network elements are ordinary Spatial Features - reference_doctype
 // "EPANET Network", feature_role Junction/Tank/Reservoir/Pipe/Pump/Valve -
 // created via epanet.add_element (never spatial.upsert_feature, which

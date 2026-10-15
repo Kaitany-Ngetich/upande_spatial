@@ -29,7 +29,7 @@ DEFAULT_ROLE = ""
 # reference_name, feature_role) triple. upsert_feature must never treat that
 # triple as a lookup key for these, or drawing a second pipe would silently
 # overwrite the first. Updating one of them is always by its own `name`.
-MULTI_INSTANCE_ROLES = ("Junction", "Tank", "Reservoir", "Pipe", "Pump", "Valve")
+MULTI_INSTANCE_ROLES = ("Junction", "Tank", "Reservoir", "Pipe", "Pump", "Valve", "Inspection Waypoint")
 
 
 def _as_geojson_feature(geometry, properties=None):

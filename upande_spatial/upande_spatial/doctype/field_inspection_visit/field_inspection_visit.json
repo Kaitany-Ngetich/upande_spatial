@@ -1,0 +1,249 @@
+{
+ "actions": [],
+ "autoname": "format:FIV-{######}",
+ "creation": "2026-10-15 16:00:00.000000",
+ "description": "One waypoint of one run: check-in position and checklist answers.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "run",
+  "plan",
+  "inspector",
+  "sequence",
+  "waypoint_title",
+  "status",
+  "column_break_1",
+  "asset",
+  "point",
+  "template",
+  "target_lat",
+  "target_lon",
+  "section_break_1",
+  "arrived_at",
+  "gps_lat",
+  "gps_lon",
+  "column_break_2",
+  "gps_accuracy_m",
+  "distance_from_target_m",
+  "within_radius",
+  "section_break_2",
+  "completed_at",
+  "skip_reason",
+  "client_id",
+  "answers"
+ ],
+ "fields": [
+  {
+   "fieldname": "run",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Run",
+   "options": "Field Inspection Run",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "run.plan",
+   "fieldname": "plan",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Plan",
+   "options": "Field Inspection Plan",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "run.inspector",
+   "fieldname": "inspector",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Inspector",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sequence",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Sequence",
+   "read_only": 1
+  },
+  {
+   "fieldname": "waypoint_title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Waypoint",
+   "read_only": 1
+  },
+  {
+   "default": "Pending",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Pending\nPassed\nFailed\nSkipped"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "asset",
+   "fieldtype": "Link",
+   "label": "Asset",
+   "options": "Spatial Feature",
+   "read_only": 1
+  },
+  {
+   "fieldname": "point",
+   "fieldtype": "Link",
+   "label": "Point",
+   "options": "Spatial Feature",
+   "read_only": 1
+  },
+  {
+   "fieldname": "template",
+   "fieldtype": "Link",
+   "label": "Template",
+   "options": "Field Inspection Template",
+   "read_only": 1
+  },
+  {
+   "fieldname": "target_lat",
+   "fieldtype": "Float",
+   "label": "Target Latitude",
+   "precision": "8",
+   "read_only": 1
+  },
+  {
+   "fieldname": "target_lon",
+   "fieldtype": "Float",
+   "label": "Target Longitude",
+   "precision": "8",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break",
+   "label": "Check-in"
+  },
+  {
+   "fieldname": "arrived_at",
+   "fieldtype": "Datetime",
+   "label": "Arrived At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "gps_lat",
+   "fieldtype": "Float",
+   "label": "GPS Latitude",
+   "precision": "8",
+   "read_only": 1
+  },
+  {
+   "fieldname": "gps_lon",
+   "fieldtype": "Float",
+   "label": "GPS Longitude",
+   "precision": "8",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gps_accuracy_m",
+   "fieldtype": "Float",
+   "label": "GPS Accuracy (m)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "distance_from_target_m",
+   "fieldtype": "Float",
+   "label": "Distance from Waypoint (m)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "within_radius",
+   "fieldtype": "Check",
+   "label": "Within Radius",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_2",
+   "fieldtype": "Section Break",
+   "label": "Result"
+  },
+  {
+   "fieldname": "completed_at",
+   "fieldtype": "Datetime",
+   "label": "Completed At",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.status=='Skipped'",
+   "fieldname": "skip_reason",
+   "fieldtype": "Small Text",
+   "label": "Skip Reason"
+  },
+  {
+   "description": "The app's id for this submission - makes offline retries safe.",
+   "fieldname": "client_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Client Id",
+   "read_only": 1
+  },
+  {
+   "fieldname": "answers",
+   "fieldtype": "Table",
+   "label": "Answers",
+   "options": "Field Inspection Answer"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-15 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Upande Spatial",
+ "name": "Field Inspection Visit",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Inspection Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Field Inspector"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "waypoint_title",
+ "track_changes": 1
+}
