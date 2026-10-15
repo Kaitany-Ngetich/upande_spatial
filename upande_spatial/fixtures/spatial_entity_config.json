@@ -3,66 +3,80 @@
   "allowed_geometries": [
    {
     "color": "#3B6D11",
+    "color_by_property": "",
+    "color_mode": "Fixed",
     "feature_role": "Boundary",
+    "fill_opacity": 0.0,
     "geometry_type": "Polygon",
     "layer_name": "Farm Boundary",
-    "marker_icon": null,
-    "color_mode": "Fixed",
-    "color_by_property": ""
+    "line_width": 0.0,
+    "marker_icon": null
    },
    {
     "color": "#185FA5",
+    "color_by_property": null,
+    "color_mode": "Fixed",
     "feature_role": "Junction",
+    "fill_opacity": 0.0,
     "geometry_type": "Point",
     "layer_name": "Water Junctions",
-    "marker_icon": "circle-dot",
-    "color_mode": "Fixed",
-    "color_by_property": null
+    "line_width": 0.0,
+    "marker_icon": "circle-dot"
    },
    {
     "color": "#228883",
+    "color_by_property": null,
+    "color_mode": "Fixed",
     "feature_role": "Reservoir",
+    "fill_opacity": 0.0,
     "geometry_type": "Point",
     "layer_name": "Water Reservoirs",
-    "marker_icon": "water",
-    "color_mode": "Fixed",
-    "color_by_property": null
+    "line_width": 0.0,
+    "marker_icon": "water"
    },
    {
     "color": "#854F0B",
+    "color_by_property": null,
+    "color_mode": "Fixed",
     "feature_role": "Tank",
+    "fill_opacity": 0.0,
     "geometry_type": "Point",
     "layer_name": "Water Tanks",
-    "marker_icon": "box-archive",
-    "color_mode": "Fixed",
-    "color_by_property": null
+    "line_width": 0.0,
+    "marker_icon": "box-archive"
    },
    {
     "color": "#3B6D11",
+    "color_by_property": null,
+    "color_mode": "Fixed",
     "feature_role": "Pipe",
+    "fill_opacity": 0.0,
     "geometry_type": "LineString",
     "layer_name": "Water Pipes",
-    "marker_icon": null,
-    "color_mode": "Fixed",
-    "color_by_property": null
+    "line_width": 0.0,
+    "marker_icon": null
    },
    {
     "color": "#b3261e",
+    "color_by_property": null,
+    "color_mode": "Fixed",
     "feature_role": "Pump",
+    "fill_opacity": 0.0,
     "geometry_type": "LineString",
     "layer_name": "Water Pumps",
-    "marker_icon": null,
-    "color_mode": "Fixed",
-    "color_by_property": null
+    "line_width": 0.0,
+    "marker_icon": null
    },
    {
     "color": "#534AB7",
+    "color_by_property": null,
+    "color_mode": "Fixed",
     "feature_role": "Valve",
+    "fill_opacity": 0.0,
     "geometry_type": "LineString",
     "layer_name": "Water Valves",
-    "marker_icon": null,
-    "color_mode": "Fixed",
-    "color_by_property": null
+    "line_width": 0.0,
+    "marker_icon": null
    }
   ],
   "description": null,
@@ -76,12 +90,14 @@
   "allowed_geometries": [
    {
     "color": "#854F0B",
+    "color_by_property": null,
+    "color_mode": "Fixed",
     "feature_role": "Location",
+    "fill_opacity": 0.0,
     "geometry_type": "Point",
     "layer_name": "Warehouse",
-    "marker_icon": "warehouse",
-    "color_mode": "Fixed",
-    "color_by_property": null
+    "line_width": 0.0,
+    "marker_icon": "warehouse"
    }
   ],
   "description": null,
@@ -95,12 +111,14 @@
   "allowed_geometries": [
    {
     "color": "#185FA5",
+    "color_by_property": null,
+    "color_mode": "Fixed",
     "feature_role": "Boundary",
+    "fill_opacity": 0.0,
     "geometry_type": "Polygon",
     "layer_name": "Farm Blocks",
-    "marker_icon": null,
-    "color_mode": "Fixed",
-    "color_by_property": null
+    "line_width": 0.0,
+    "marker_icon": null
    }
   ],
   "description": "Farm Block boundary - Farm Block itself carries no geometry field, the boundary is stored externally as a Spatial Feature keyed to it.",
@@ -114,12 +132,14 @@
   "allowed_geometries": [
    {
     "color": "#228883",
+    "color_by_property": null,
+    "color_mode": "Fixed",
     "feature_role": "Location",
+    "fill_opacity": 0.0,
     "geometry_type": "Point",
     "layer_name": "Water Pump",
-    "marker_icon": "faucet-drip",
-    "color_mode": "Fixed",
-    "color_by_property": null
+    "line_width": 0.0,
+    "marker_icon": "faucet-drip"
    }
   ],
   "description": "Irrigation infrastructure (tanks/valves) - Tank And Valve already carries its own location_geojson field, this config just registers it in the central catalog so it's discoverable alongside every other spatial asset.",
@@ -132,29 +152,54 @@
  {
   "allowed_geometries": [
    {
-    "color": "#534AB7",
-    "feature_role": "Location",
-    "geometry_type": "Point",
-    "layer_name": "Site",
-    "marker_icon": "location-dot",
+    "color": "#C2410C",
+    "color_by_property": null,
     "color_mode": "Fixed",
-    "color_by_property": null
+    "feature_role": "Inspection Waypoint",
+    "fill_opacity": 0.0,
+    "geometry_type": "Point",
+    "layer_name": "Inspection Waypoints",
+    "line_width": 0.0,
+    "marker_icon": null
    },
    {
-    "color": "#534AB7",
-    "feature_role": "Boundary",
-    "geometry_type": "Polygon",
-    "layer_name": "Site Boundary",
-    "marker_icon": null,
+    "color": "#EA580C",
+    "color_by_property": null,
     "color_mode": "Fixed",
-    "color_by_property": null
+    "feature_role": "Inspection Route",
+    "fill_opacity": 0.0,
+    "geometry_type": "LineString",
+    "layer_name": "Inspection Routes",
+    "line_width": 0.0,
+    "marker_icon": null
    }
   ],
-  "description": "Core ERPNext Location (Assets module) - tree-structured land/plot records. Location already carries its own Geolocation field; this config registers it in the central catalog too, same pattern as Farm and Tank And Valve, so it's queryable alongside every other spatial asset rather than only reachable through its own doctype.",
+  "description": "Inspection routes - where inspectors are sent. Waypoints are created from the plan's route table.",
   "docstatus": 0,
   "doctype": "Spatial Entity Config",
-  "modified": "2026-08-21 16:16:10.927100",
-  "name": "Location",
-  "reference_doctype": "Location"
+  "modified": "2026-10-15 18:34:44.305836",
+  "name": "Field Inspection Plan",
+  "reference_doctype": "Field Inspection Plan"
+ },
+ {
+  "allowed_geometries": [
+   {
+    "color": "#7C3AED",
+    "color_by_property": null,
+    "color_mode": "Fixed",
+    "feature_role": "GPS Track",
+    "fill_opacity": 0.0,
+    "geometry_type": "LineString",
+    "layer_name": "GPS Tracks",
+    "line_width": 0.0,
+    "marker_icon": null
+   }
+  ],
+  "description": "What happened in the field - the GPS track an inspector walked on a run.",
+  "docstatus": 0,
+  "doctype": "Spatial Entity Config",
+  "modified": "2026-10-15 18:34:45.253675",
+  "name": "Field Inspection Run",
+  "reference_doctype": "Field Inspection Run"
  }
 ]

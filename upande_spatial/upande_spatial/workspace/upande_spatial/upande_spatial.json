@@ -1,8 +1,8 @@
 {
  "app": "upande_spatial",
  "charts": [],
- "content": "[{\"data\": {\"col\": 12, \"text\": \"<span class=\\\"h4\\\"><b>Upande Spatial</b></span>\"}, \"id\": \"header\", \"type\": \"header\"}, {\"data\": {\"col\": 12, \"text\": \"Shared spatial data module \\u2014 one place for geometry (points/lines/polygons) referenced by other doctypes (Farm, Warehouse, Guard Device Token, ...) rather than each module storing its own.\"}, \"id\": \"para\", \"type\": \"paragraph\"}, {\"data\": {\"col\": 12, \"text\": \"Shortcuts\"}, \"id\": \"shortcuts_header\", \"type\": \"header\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Spatial Feature\"}, \"id\": \"shortcuts\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Spatial Entity Config\"}, \"id\": \"shortcuts2\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Map Viewer\"}, \"id\": \"shortcuts3\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Map Viewer Plugins\"}, \"id\": \"shortcuts4\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Spatial Data Catalog\"}, \"id\": \"shortcuts5\", \"type\": \"shortcut\"}, {\"id\": \"epanet_card\", \"type\": \"card\", \"data\": {\"card_name\": \"Water Network (EPANET)\", \"col\": 4}}]",
- "creation": "2026-09-24 07:08:42.359177",
+ "content": "[{\"data\": {\"col\": 12, \"text\": \"<span class=\\\"h4\\\"><b>Upande Spatial</b></span>\"}, \"id\": \"header\", \"type\": \"header\"}, {\"data\": {\"col\": 12, \"text\": \"One place for every map feature in ERP - farm and block boundaries, warehouses, water networks and other utility lines (pipes, power and internet cables) - drawn here, in QGIS or in the field app, and linked to the records they belong to. Water networks can be simulated with EPANET, and field teams inspect assets along planned routes.\"}, \"id\": \"para\", \"type\": \"paragraph\"}, {\"data\": {\"col\": 12, \"text\": \"Shortcuts\"}, \"id\": \"shortcuts_header\", \"type\": \"header\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Spatial Feature\"}, \"id\": \"shortcuts\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Spatial Entity Config\"}, \"id\": \"shortcuts2\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Map Viewer\"}, \"id\": \"shortcuts3\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Map Viewer Plugins\"}, \"id\": \"shortcuts4\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Spatial Data Catalog\"}, \"id\": \"shortcuts5\", \"type\": \"shortcut\"}, {\"id\": \"inspections_header\", \"type\": \"header\", \"data\": {\"col\": 12, \"text\": \"Field Inspections\"}}, {\"id\": \"inspection_shortcut1\", \"type\": \"shortcut\", \"data\": {\"col\": 3, \"shortcut_name\": \"Inspection Plans\"}}, {\"id\": \"inspection_shortcut2\", \"type\": \"shortcut\", \"data\": {\"col\": 3, \"shortcut_name\": \"Open Inspection Runs\"}}, {\"id\": \"inspection_shortcut3\", \"type\": \"shortcut\", \"data\": {\"col\": 3, \"shortcut_name\": \"Failed Checks\"}}, {\"id\": \"modules_header\", \"type\": \"header\", \"data\": {\"col\": 12, \"text\": \"Modules\"}}, {\"id\": \"epanet_card\", \"type\": \"card\", \"data\": {\"card_name\": \"Water Network (EPANET)\", \"col\": 4}}, {\"id\": \"inspections_card\", \"type\": \"card\", \"data\": {\"card_name\": \"Field Inspections\", \"col\": 4}}]",
+ "creation": "2026-10-15 18:13:57.911349",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -92,9 +92,58 @@
    "link_type": "Report",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Field Inspections",
+   "link_count": 4,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Checklist Templates",
+   "link_count": 0,
+   "link_to": "Field Inspection Template",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Inspection Plans",
+   "link_count": 0,
+   "link_to": "Field Inspection Plan",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Inspection Runs",
+   "link_count": 0,
+   "link_to": "Field Inspection Run",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Inspection Visits",
+   "link_count": 0,
+   "link_to": "Field Inspection Visit",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2026-09-24 08:20:21.725122",
+ "modified": "2026-10-15 18:33:47.345779",
  "modified_by": "Administrator",
  "module": "Upande Spatial",
  "name": "Upande Spatial",
@@ -137,6 +186,30 @@
    "link_to": "Spatial Data Catalog",
    "report_ref_doctype": "Spatial Feature",
    "type": "Report"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "Inspection Plans",
+   "link_to": "Field Inspection Plan",
+   "stats_filter": "[[\"Field Inspection Plan\", \"enabled\", \"=\", 1]]",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Open Inspection Runs",
+   "link_to": "Field Inspection Run",
+   "stats_filter": "[[\"Field Inspection Run\", \"status\", \"in\", [\"Planned\", \"Downloaded\", \"In Progress\"]]]",
+   "type": "DocType"
+  },
+  {
+   "color": "Red",
+   "doc_view": "List",
+   "label": "Failed Checks",
+   "link_to": "Field Inspection Visit",
+   "stats_filter": "[[\"Field Inspection Visit\", \"status\", \"=\", \"Failed\"]]",
+   "type": "DocType"
   }
  ],
  "title": "Upande Spatial",
