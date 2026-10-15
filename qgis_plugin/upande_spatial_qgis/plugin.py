@@ -4,7 +4,7 @@ every loaded ERP layer up to live sync."""
 import os
 import tempfile
 
-from qgis.core import Qgis, QgsApplication, QgsProject, QgsTask
+from qgis.core import Qgis, QgsApplication, QgsLayerTreeGroup, QgsProject, QgsTask
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QAction, QIcon
 from qgis.PyQt.QtWidgets import (
@@ -22,8 +22,9 @@ from qgis.PyQt.QtWidgets import (
 )
 
 from . import layers as L
+from . import mergin_sync as MS
 from .client import SessionExpired
-from .dialogs import LoginDialog, PublishDialog
+from .dialogs import LoginDialog, MerginExportDialog, PublishDialog
 
 HERE = os.path.dirname(__file__)
 ROLE_KIND = Qt.ItemDataRole.UserRole
@@ -60,6 +61,8 @@ class UpandeSpatialPlugin:
 		self._action(None, "Force-push selected features", self.force_push_selected)
 		self._action(None, "Check out selected features", lambda: self.checkout_selected(True))
 		self._action(None, "Release selected features", lambda: self.checkout_selected(False))
+		self._action(None, "Mergin Maps: export ERP layers to GeoPackage…", self.mergin_export)
+		self._action(None, "Mergin Maps: sync GeoPackage ⇄ ERP", self.mergin_sync)
 		QgsProject.instance().readProject.connect(self._reattach_project_layers)
 		QgsProject.instance().layerWillBeRemoved.connect(self._forget_layer)
 		QgsApplication.instance().aboutToQuit.connect(self.logout)
@@ -266,6 +269,11 @@ class UpandeSpatialPlugin:
 				item = QTreeWidgetItem(net_root, [n["network_name"], "results"])
 				item.setData(0, ROLE_KIND, "epanet")
 				item.setData(0, ROLE_DATA, n)
+				item.setToolTip(0, "Load ERP's latest simulation results for this network")
+				run = QTreeWidgetItem(net_root, [f"▶ Run {n['network_name']} in ERP", "simulate"])
+				run.setData(0, ROLE_KIND, "run")
+				run.setData(0, ROLE_DATA, n)
+				run.setToolTip(0, "Run EPANET in ERP on the current ERP data (save your layer edits first), then load the results")
 				inp = QTreeWidgetItem(net_root, [f"{n['network_name']} (.inp)", "model"])
 				inp.setData(0, ROLE_KIND, "inp")
 				inp.setData(0, ROLE_DATA, n)
@@ -284,6 +292,8 @@ class UpandeSpatialPlugin:
 			self.load_epanet_results(data)
 		elif kind == "inp":
 			self.download_inp(data)
+		elif kind == "run":
+			self.run_in_erp(data)
 
 	# ── loading ────────────────────────────────────────────────
 	def load_layer(self, layer_name, geometry_type, entry=None):
@@ -349,15 +359,39 @@ class UpandeSpatialPlugin:
 		self.erp_async(f"Loading EPANET results for {net['network_name']}", lambda c: c.epanet_results(net["name"]),
 			lambda res: self._add_epanet_layers(net, res))
 
+	def run_in_erp(self, net):
+		"""Simulate in ERP on what's in ERP right now (so edits saved from QGIS
+		are included), then show the new run's results."""
+		unsaved = [s.layer.name() for s in self.syncs.values() if getattr(s, "layer", None) is not None and s.layer.isEditable()]
+		if unsaved:
+			self.msg("Save your edits first (" + ", ".join(unsaved[:3]) + ") - ERP simulates what it has.", Qgis.MessageLevel.Warning)
+			return
+
+		def done(res):
+			if (res or {}).get("status") == "Failed" or (res or {}).get("error"):
+				self.msg(f"ERP simulation failed: {res.get('error') or res}", Qgis.MessageLevel.Critical, 0)
+				return
+			self.load_epanet_results(net)
+
+		self.erp_async(f"Running EPANET for {net['network_name']} in ERP", lambda c: c.run_simulation(net["name"]), done)
+
 	def _add_epanet_layers(self, net, res):
 		suffix = f" · {res['run']}" + (f" · {res['statistic'].lower()}" if res.get("statistic") not in (None, "NONE") else "")
-		group = QgsProject.instance().layerTreeRoot().insertGroup(0, f"EPANET {net['network_name']}{suffix}")
-		for key, gtype, field in (("links", "LineString", "flow_m3s"), ("nodes", "Point", "pressure_m")):
+		root = QgsProject.instance().layerTreeRoot()
+		prefix = f"EPANET {net['network_name']} · "
+		for old in [g for g in root.children() if isinstance(g, QgsLayerTreeGroup) and g.name().startswith(prefix)]:
+			# one results group per network: a re-run replaces the previous one
+			QgsProject.instance().removeMapLayers([l.layerId() for l in old.findLayers()])
+			root.removeChildNode(old)
+		group = root.insertGroup(0, f"EPANET {net['network_name']}{suffix}")
+		peak = any((f.get("properties") or {}).get("pressure_max_m") is not None for f in res["nodes"]["features"])
+		for key, gtype, field in (("links", "LineString", "velocity_max_ms" if peak else "flow_m3s"), ("nodes", "Point", "pressure_max_m" if peak else "pressure_m")):
 			vl = L.build_results_layer(res[key], f"{net['network_name']} {key}", gtype, self.client.url)
 			self._graduate(vl, field)
 			QgsProject.instance().addMapLayer(vl, False)
 			group.addLayer(vl)
-		self.msg(f"Loaded EPANET results {res['run']} (flows in m³/s, pressures in m).")
+		self.msg(f"Loaded EPANET results {res['run']} (flows in m³/s, pressures in m"
+			+ ("; coloured by peak pressure / peak velocity)." if peak else ")."))
 
 	def _graduate(self, vl, field):
 		"""Colour results by pressure/flow - best effort, plain style if the
@@ -454,6 +488,160 @@ class UpandeSpatialPlugin:
 		verb = "Checked out" if checkout else "Released"
 		self.msg(f"{verb} {len(writes)} feature(s)." + (f" {len(errors)} failed: " + "; ".join(errors[:3]) if errors else ""),
 			Qgis.MessageLevel.Success if not errors else Qgis.MessageLevel.Warning)
+
+	# ── Mergin Maps ────────────────────────────────────────────
+	def _erp_gpkgs(self):
+		"""GeoPackages behind this project's layers that hold ERP tables."""
+		paths = []
+		for lyr in QgsProject.instance().mapLayers().values():
+			if lyr.providerType() != "ogr":
+				continue
+			path = lyr.source().split("|", 1)[0]
+			if path.lower().endswith(".gpkg") and path not in paths and MS.synced_tables(path):
+				paths.append(path)
+		return paths
+
+	def mergin_export(self):
+		if not self.ensure_client():
+			return
+		try:
+			self.catalog = self.erp(lambda c: c.catalog())
+		except Exception as e:
+			self.msg(f"Could not read the ERP catalog: {e}", Qgis.MessageLevel.Critical)
+			return
+		home = QgsProject.instance().homePath() or os.path.expanduser("~")
+		existing = self._erp_gpkgs()
+		default = existing[0] if existing else os.path.join(home, "erp_field_data.gpkg")
+		farm = self.farm_combo.currentData() if self.dock else ""
+		dlg = MerginExportDialog(self.catalog, default, farm, self.iface.mainWindow())
+		if not dlg.exec():
+			return
+		path, entries, farm = dlg.path.filePath(), dlg.entries(), dlg.farm.currentData()
+		if not path or not entries:
+			return
+		if not path.lower().endswith(".gpkg"):
+			path += ".gpkg"
+		try:
+			counts = self.erp(lambda c: MS.export_to_gpkg(c, path, entries, farm=farm or None, site=c.url))
+		except Exception as e:
+			self.msg(f"Export failed: {e}", Qgis.MessageLevel.Critical)
+			return
+		self._add_gpkg_layers(path, entries, farm, counts)
+		self.msg(f"Exported {sum(counts.values())} features in {len(counts)} layer(s) to {os.path.basename(path)}. "
+			"Save the project, then sync it with Mergin Maps.", Qgis.MessageLevel.Success, 12)
+
+	def _add_gpkg_layers(self, path, entries, farm, counts):
+		"""Show the exported tables in the project (once), styled like ERP and
+		with ERP's bookkeeping columns hidden from field forms."""
+		from qgis.core import QgsEditorWidgetSetup, QgsVectorLayer
+
+		project = QgsProject.instance()
+		have = {l.source() for l in project.mapLayers().values()}
+		root = project.layerTreeRoot()
+		group = root.findGroup("ERP field data (Mergin)") or root.insertGroup(0, "ERP field data (Mergin)")
+		for entry in entries:
+			table = MS.table_name(entry["layer"], entry.get("geometry_type"), farm)
+			source = f"{path}|layername={table}"
+			if source in have:
+				continue
+			vl = QgsVectorLayer(source, entry["layer"] + (f" — {farm}" if farm else ""), "ogr")
+			if not vl.isValid():
+				continue
+			L.apply_style(vl, entry.get("style") or {})
+			for i, f in enumerate(vl.fields()):
+				if f.name() in MS.COMPUTED or f.name() in ("_reference_doctype", "_reference_name", "_company", "_farm", "_feature_role"):
+					vl.setEditorWidgetSetup(i, QgsEditorWidgetSetup("Hidden", {}))
+			project.addMapLayer(vl, False)
+			group.addLayer(vl)
+
+	def mergin_sync(self):
+		paths = self._erp_gpkgs()
+		if not paths:
+			self.msg("No ERP GeoPackage in this project - use 'Mergin Maps: export ERP layers to GeoPackage…' first.",
+				Qgis.MessageLevel.Warning)
+			return
+		editing = [l.name() for l in QgsProject.instance().mapLayers().values()
+			if l.providerType() == "ogr" and l.source().split("|", 1)[0] in paths and l.isEditable()]
+		if editing:
+			self.msg("Save or discard edits first: " + ", ".join(editing[:3]), Qgis.MessageLevel.Warning)
+			return
+		if not self.ensure_client():
+			return
+		try:
+			plans = self.erp(lambda c: [(p, t["table_name"], MS.plan_sync(c, p, t["table_name"])) for p in paths for t in MS.synced_tables(p)])
+		except Exception as e:
+			self.msg(f"Could not compare with ERP: {e}", Qgis.MessageLevel.Critical)
+			return
+		totals = {}
+		for _, _, plan in plans:
+			for k, v in MS.summarize(plan).items():
+				totals[k] = totals.get(k, 0) + v
+		if not any(totals.values()):
+			self.msg("GeoPackage and ERP are already in step - nothing to sync.", Qgis.MessageLevel.Success)
+			return
+		text = (f"To ERP:  {totals['added']} new, {totals['updated']} edited, {totals['deleted']} deleted\n"
+			f"From ERP:  {totals['refresh']} updated, {totals['add_local']} new, {totals['remove_local']} removed")
+		deletes = True
+		if totals["deleted"]:
+			box = QMessageBox(QMessageBox.Icon.Question, "Sync with ERP", text + f"\n\n{totals['deleted']} feature(s) were deleted in "
+				"the field. Delete them in ERP too?", parent=self.iface.mainWindow())
+			yes = box.addButton("Sync and delete in ERP", QMessageBox.ButtonRole.AcceptRole)
+			keep = box.addButton("Sync, keep them in ERP", QMessageBox.ButtonRole.ActionRole)
+			box.addButton(QMessageBox.StandardButton.Cancel)
+			box.exec()
+			if box.clickedButton() not in (yes, keep):
+				return
+			deletes = box.clickedButton() is yes
+		results, conflicts = [], []
+		try:
+			for path, table, plan in plans:
+				res = self.erp(lambda c, path=path, plan=plan: MS.apply_sync(c, path, plan, deletes=deletes))
+				results.append(res)
+				conflicts += [(path, table, c["name"], c.get("error")) for c in res["conflicts"]]
+		except Exception as e:
+			self.msg(f"Sync stopped: {e}", Qgis.MessageLevel.Critical, 0)
+		self._reload_gpkg_layers(paths)
+		s = {k: sum(r[k] for r in results) for k in ("created", "updated", "deleted", "refreshed", "added_here", "removed_here")}
+		errors = [e for r in results for e in r["errors"]]
+		self.msg(f"ERP: {s['created']} created, {s['updated']} updated, {s['deleted']} deleted · GeoPackage: {s['refreshed']} refreshed, "
+			f"{s['added_here']} added, {s['removed_here']} removed. Now sync with Mergin Maps to send this to the field.",
+			Qgis.MessageLevel.Success if not (errors or conflicts) else Qgis.MessageLevel.Warning, 15)
+		if errors:
+			QMessageBox.warning(self.iface.mainWindow(), "Not saved to ERP", "\n".join(
+				f"{e.get('name') or ('new feature ' + str(e.get('client_id', '')))}: {e.get('error')}" for e in errors[:30]))
+		if conflicts:
+			self._settle_conflicts(conflicts)
+
+	def _settle_conflicts(self, conflicts):
+		box = QMessageBox(QMessageBox.Icon.Warning, "Changed in both places",
+			f"{len(conflicts)} feature(s) were edited in the field AND in ERP since the last sync:\n\n"
+			+ "\n".join(f"{name}" for _, _, name, _ in conflicts[:20]) + ("\n…" if len(conflicts) > 20 else "")
+			+ "\n\nWhich version should win?", parent=self.iface.mainWindow())
+		field = box.addButton("Keep field version", QMessageBox.ButtonRole.AcceptRole)
+		erp = box.addButton("Keep ERP version", QMessageBox.ButtonRole.DestructiveRole)
+		box.addButton("Decide later", QMessageBox.ButtonRole.RejectRole)
+		box.exec()
+		keep = "field" if box.clickedButton() is field else "erp" if box.clickedButton() is erp else None
+		if keep is None:
+			self.msg("Conflicting features are left as they are - they'll come up again at the next sync.")
+			return
+		by_table = {}
+		for path, table, name, _ in conflicts:
+			by_table.setdefault((path, table), []).append(name)
+		try:
+			for (path, table), names in by_table.items():
+				self.erp(lambda c, path=path, table=table, names=names: MS.resolve_conflicts(c, path, table, names, keep))
+		except Exception as e:
+			self.msg(f"Could not settle conflicts: {e}", Qgis.MessageLevel.Critical)
+			return
+		self._reload_gpkg_layers({p for p, _ in by_table})
+		self.msg(f"Kept the {'field' if keep == 'field' else 'ERP'} version of {len(conflicts)} feature(s).", Qgis.MessageLevel.Success)
+
+	def _reload_gpkg_layers(self, paths):
+		for lyr in QgsProject.instance().mapLayers().values():
+			if lyr.providerType() == "ogr" and lyr.source().split("|", 1)[0] in paths:
+				lyr.dataProvider().reloadData()
+				lyr.triggerRepaint()
 
 	def publish(self):
 		if not self.ensure_client():

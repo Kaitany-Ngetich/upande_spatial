@@ -319,6 +319,14 @@ def epanet_results(network, run=None):
 		series = ((ts.get(group) or {}).get(attribute) or {}).get(n) or [None]
 		return series[-1]
 
+	def span(group, attribute, n, absolute=False):
+		"""(min, max) of a result over every timestep - (None, None) for a
+		steady-state run or a missing series."""
+		series = [v for v in (((ts.get(group) or {}).get(attribute) or {}).get(n) or []) if v is not None]
+		if absolute:
+			series = [abs(v) for v in series]
+		return (min(series), max(series)) if series else (None, None)
+
 	flow_units = (payload.get("settings") or {}).get("flow_units")
 
 	out = {"Point": [], "LineString": []}
@@ -330,11 +338,14 @@ def epanet_results(network, run=None):
 		props = {"_name": n, "_title": f.get("title"), "element": types.get(n) or f["feature_role"], "run": run_doc.name}
 		if n in nodes:
 			r = nodes[n]
+			p_min, p_max = span("node", "pressure", n)
 			props.update(pressure_m=r.get("pressure"), head_m=r.get("head"), quality=r.get("quality"),
-				demand_m3s=last("node", "demand", n))
+				demand_m3s=last("node", "demand", n), pressure_min_m=p_min, pressure_max_m=p_max,
+				elevation_m=(f.get("_props") or {}).get("elevation_m"))
 		elif n in links:
 			r = links[n]
-			props.update(flow_m3s=r.get("flow"), velocity_ms=r.get("velocity"), headloss=last("link", "headloss", n))
+			props.update(flow_m3s=r.get("flow"), velocity_ms=r.get("velocity"), headloss=last("link", "headloss", n),
+				velocity_max_ms=span("link", "velocity", n, absolute=True)[1])
 		else:
 			props["excluded"] = 1
 		kind = "Point" if g.get("type") == "Point" else "LineString"

@@ -180,6 +180,9 @@ class ErpClient:
 	def epanet_results(self, network):
 		return self.call(QGIS_API + "epanet_results", network=network)
 
+	def run_simulation(self, network):
+		return self.call(EPANET_API + "run_simulation", network=network)
+
 	def export_inp(self, network):
 		return self.download(EPANET_API + "export_inp", network=network)
 

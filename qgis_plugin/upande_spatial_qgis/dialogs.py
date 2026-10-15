@@ -1,7 +1,8 @@
-"""Login and Publish dialogs."""
+"""Login, Publish and Mergin export dialogs."""
 
 from qgis.core import QgsMapLayerProxyModel, QgsSettings
-from qgis.gui import QgsFieldComboBox, QgsMapLayerComboBox
+from qgis.gui import QgsFieldComboBox, QgsFileWidget, QgsMapLayerComboBox
+from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import (
 	QCheckBox,
 	QComboBox,
@@ -11,6 +12,8 @@ from qgis.PyQt.QtWidgets import (
 	QInputDialog,
 	QLabel,
 	QLineEdit,
+	QListWidget,
+	QListWidgetItem,
 	QMessageBox,
 	QVBoxLayout,
 )
@@ -191,3 +194,50 @@ class PublishDialog(QDialog):
 			"farm": self.farm.currentText().strip() or None,
 			"title_field": self.title_field.currentField() or None,
 		}
+
+
+class MerginExportDialog(QDialog):
+	"""Pick ERP layers + a GeoPackage (inside the Mergin project folder) to
+	take to the field."""
+
+	def __init__(self, catalog, default_path, farm="", parent=None):
+		super().__init__(parent)
+		self.setWindowTitle("Export ERP layers for Mergin Maps")
+		form = QFormLayout()
+		self.path = QgsFileWidget()
+		self.path.setStorageMode(QgsFileWidget.StorageMode.SaveFile)
+		self.path.setFilter("GeoPackage (*.gpkg)")
+		self.path.setFilePath(default_path)
+		form.addRow("GeoPackage", self.path)
+		self.farm = QComboBox()
+		self.farm.addItem("All farms", "")
+		for f in catalog.get("farms") or []:
+			self.farm.addItem(f, f)
+		self.farm.setCurrentIndex(max(self.farm.findData(farm or ""), 0))
+		form.addRow("Farm", self.farm)
+		self.layers = QListWidget()
+		for entry in catalog.get("layers") or []:
+			item = QListWidgetItem(f"{entry['layer']} · {entry.get('geometry_type') or '?'}  ({entry.get('count', 0)})")
+			item.setData(Qt.ItemDataRole.UserRole, entry)
+			item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+			item.setCheckState(Qt.CheckState.Checked if entry.get("count") else Qt.CheckState.Unchecked)
+			self.layers.addItem(item)
+		form.addRow("Layers", self.layers)
+		note = QLabel(
+			"Save the GeoPackage inside your Mergin Maps project folder. Re-exporting a layer replaces its table "
+			"(sync first, or unsynced field edits in it are lost)."
+		)
+		note.setWordWrap(True)
+		form.addRow(note)
+		buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+		buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Export")
+		buttons.accepted.connect(self.accept)
+		buttons.rejected.connect(self.reject)
+		layout = QVBoxLayout(self)
+		layout.addLayout(form)
+		layout.addWidget(buttons)
+		self.resize(520, 460)
+
+	def entries(self):
+		return [self.layers.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.layers.count())
+			if self.layers.item(i).checkState() == Qt.CheckState.Checked]
