@@ -1,0 +1,3207 @@
+{#-
+	Map Viewer - the full-screen web GIS at /map-viewer.
+
+	Lives in code (was a "map-viewer" Web Page record), so it's versioned
+	with the app and no longer shows up or can be edited under
+	Website > Web Page. Same layout as that Web Page rendered: Frappe's web
+	shell with navbar/footer hidden. Context (title, meta description, full
+	width) is set in map_viewer.py; plugins load from
+	public/js/plugins/ (see the "Plugin API" section below).
+
+	Everything in the raw block below is served as-is - no Jinja - so the viewer's
+	JavaScript can use any braces it likes.
+-#}
+{% extends "templates/web.html" %}
+
+{% block meta_block %}
+	{% include "templates/includes/meta_block.html" %}
+{% endblock %}
+
+{% block breadcrumbs %}
+	{% include "templates/includes/breadcrumbs.html" %}
+{% endblock %}
+
+{% block style %}
+<style>.navbar,.navbar-primary,.web-footer,.page-header-wrapper{display:none!important}</style>
+{% endblock %}
+
+{% block page_content %}
+<div class="webpage-content">
+<article class="web-page-content" id="map-viewer" style="text-align: Left">
+{% raw %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<!-- Golden Layout - the actual dockable/resizable/floatable panel engine behind
+     the Contents / Map / Properties workspace, replacing the old fixed rail +
+     fixed canvas split. Requires jQuery (v1.x's one hard dependency). -->
+<script src="https://unpkg.com/jquery@3.7.1/dist/jquery.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/golden-layout@1.5.9/src/css/goldenlayout-base.css">
+<link rel="stylesheet" href="https://unpkg.com/golden-layout@1.5.9/src/css/goldenlayout-light-theme.css">
+<script src="https://unpkg.com/golden-layout@1.5.9/dist/goldenlayout.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://unpkg.com/shpjs@4.0.4/dist/shp.js"></script>
+<script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js"></script>
+<script src="https://unpkg.com/tokml@0.4.0/tokml.js"></script>
+<script src="https://unpkg.com/togpx@0.5.4/togpx.js"></script>
+<script src="https://unpkg.com/leaflet-image@0.4.0/leaflet-image.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<style>
+:root{
+  --ink:#0a0a0a;--ink-2:#2a2a26;--ink-3:#3a3a34;--ink-4:#5a5a52;--ink-mute:#8a8780;
+  --surface:#fafaf6;--surface-2:#ffffff;--hairline:rgba(10,10,10,.06);
+  --shadow-card:0 1px 0 rgba(10,10,10,.04),0 8px 32px -16px rgba(10,10,10,.10);
+  --shadow-float:0 4px 16px rgba(10,10,10,.08),0 16px 48px -12px rgba(10,10,10,.22);
+  --signal:#228883;--signal-dark:#166b67;--signal-soft:rgba(34,136,131,.11);
+  --blue:#185FA5;--blue-lt:#E6F1FB;--blue-dk:#0C447C;
+  --purple:#534AB7;--purple-lt:#EEEDFE;
+  --green:#3B6D11;--green-lt:#EAF3DE;--green-dk:#27500A;
+  --amber:#854F0B;--amber-lt:#FAEEDA;--amber-dk:#633806;
+  --radius:16px;--radius-sm:10px;
+  --sans:'Poppins',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --rail-w:224px;
+  --float-w:296px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%;overflow:hidden;font-family:var(--sans);background:var(--surface);color:var(--ink-3)}
+.navbar,.navbar-primary,.web-footer,.page-header-wrapper,.page-breadcrumbs{display:none!important}
+/* Break fully out of the website theme's Bootstrap-style wrapper — this
+   page IS the app shell, full viewport, same escape hatch patrol-map uses. */
+.container,.page-content-wrapper,.webpage-content,.page_content,.page-content{max-width:none!important;width:100%!important;padding:0!important;margin:0!important}
+#spatial-root{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;height:100vh;height:100dvh;width:100vw}
+/* The ribbon now spans full width at the very top (was previously nested
+   inside .ss-main, alongside the rail); everything below it is Golden
+   Layout's domain. */
+#spatial-root .ss-ribbon{flex-shrink:0}
+#spatial-root #glContainer{flex:1;min-height:0;position:relative}
+/* Golden Layout gives each panel's content a wrapper it sizes itself -
+   our moved-in content just needs to actually fill that wrapper. */
+#spatial-root .lm_content{overflow:hidden}
+#spatial-root .lm_content>.gl-fill{height:100%;width:100%;display:flex;flex-direction:column;overflow:hidden}
+/* The rail's own width rule no longer applies once it's a GL panel (GL
+   sizes the column instead) - only its internal flex-column/scroll
+   behavior is still wanted. */
+#spatial-root .lm_content .app-rail{width:100%;height:100%;border-right:none}
+/* panelDetail used to be an absolutely-positioned float; as the always-on
+   Properties panel it just needs to fill its GL container instead. */
+#spatial-root .lm_content .props-panel{position:static;width:100%;height:100%;max-height:none;box-shadow:none;border-radius:0;border:none}
+a{text-decoration:none;color:inherit}
+button,input,select,textarea{font-family:inherit}
+
+/* ═══ APP NAV RAIL ═══ */
+#spatial-root .app-rail{width:var(--rail-w);flex-shrink:0;height:100%;background:var(--surface-2);border-right:1px solid var(--hairline);display:flex;flex-direction:column;overflow-y:auto}
+#spatial-root .rail-brand{display:flex;align-items:center;gap:9px;padding:16px 16px 14px}
+#spatial-root .rail-brand-mark{width:26px;height:26px;border-radius:7px;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+#spatial-root .rail-brand-name{font-size:13.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#spatial-root .rail-nav{flex:1;padding:2px 10px 14px}
+#spatial-root .rail-group{margin-top:16px}
+#spatial-root .rail-group:first-child{margin-top:2px}
+#spatial-root .rail-group-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-mute);padding:0 8px 6px}
+#spatial-root .rail-link{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:8px;font-size:13px;color:var(--ink-3);transition:background .15s}
+#spatial-root .rail-link:hover{background:rgba(10,10,10,.05)}
+#spatial-root .rail-link.active{background:var(--ink);color:#fafaf6;font-weight:600}
+#spatial-root .rail-link i{width:15px;text-align:center;font-size:12.5px;flex-shrink:0;opacity:.85}
+#spatial-root .rail-foot{border-top:1px solid var(--hairline);padding:10px 16px 12px;font-size:11.5px;color:var(--ink-mute);display:flex;align-items:center;gap:7px}
+#spatial-root .rail-foot i{font-size:10px}
+
+/* ═══ MAIN COLUMN ═══ */
+#spatial-root .ss-main{flex:1;min-width:0;display:flex;flex-direction:column;height:100%}
+#spatial-root .ss-ribbon{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 18px;border-bottom:1px solid var(--hairline);flex-wrap:wrap;background:var(--surface-2);flex-shrink:0}
+#spatial-root .ss-ribbon-l{display:flex;align-items:center;gap:10px;min-width:0}
+#spatial-root .ss-dot{width:9px;height:9px;border-radius:50%;background:var(--signal);flex-shrink:0;animation:ss-pulse 2s ease-in-out infinite}
+@keyframes ss-pulse{0%,100%{box-shadow:0 0 0 0 rgba(34,136,131,.45)}50%{box-shadow:0 0 0 6px rgba(34,136,131,0)}}
+#spatial-root .ss-title{font-size:14px;font-weight:600;color:var(--ink);white-space:nowrap}
+#spatial-root .ss-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;background:rgba(10,10,10,.05);color:var(--ink-3);white-space:nowrap}
+#spatial-root .ss-search{position:relative;display:flex;align-items:center}
+#spatial-root .ss-search i{position:absolute;left:10px;font-size:11px;color:var(--ink-mute);pointer-events:none}
+#spatial-root .ss-search input{font-size:12.5px;padding:7px 10px 7px 28px;border:1px solid var(--hairline);border-radius:999px;background:var(--surface);color:var(--ink-3);width:170px;transition:width .15s}
+#spatial-root .ss-search input:focus{outline:none;width:220px;border-color:var(--blue)}
+#spatial-root .ss-ribbon-r{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#spatial-root .btn{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:7px 14px;border-radius:999px;border:0;background:rgba(10,10,10,.05);color:var(--ink-3);cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+#spatial-root .btn:hover{background:rgba(10,10,10,.09)}
+#spatial-root .btn-primary{background:var(--ink);color:#fafaf6}
+#spatial-root .btn-primary:hover{background:var(--ink-2)}
+#spatial-root .btn-sm{padding:6px 12px;font-size:12px}
+#spatial-root .btn.active{background:var(--signal);color:#fff}
+#spatial-root .btn-danger{background:rgba(211,47,47,.09);color:#b3261e}
+#spatial-root .btn-danger:hover{background:rgba(211,47,47,.16)}
+#spatial-root .btn:disabled{opacity:.45;cursor:not-allowed}
+#spatial-root .ribbon-divider{width:1px;height:22px;background:var(--hairline);margin:0 2px}
+
+/* ─── CANVAS ─── */
+#spatial-root .ss-canvas{position:relative;flex:1;min-height:0;min-width:0;background:#0f172a}
+#spatial-root .ss-canvas-el{width:100%;height:100%}
+#spatial-root .ss-loading{position:absolute;inset:0;z-index:1000;background:rgba(15,23,42,.38);backdrop-filter:blur(1px);display:none;flex-direction:column;align-items:center;justify-content:center;gap:11px;color:#fff;font-size:13px;pointer-events:none}
+#spatial-root .ss-loading.show{display:flex}
+#spatial-root .ss-spinner{width:28px;height:28px;border:3px solid rgba(255,255,255,.25);border-top-color:var(--signal);border-radius:50%;animation:ss-spin .75s linear infinite}
+@keyframes ss-spin{to{transform:rotate(360deg)}}
+#spatial-root .ss-toast{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:1400;background:rgba(15,23,42,.92);color:#fff;border-radius:999px;padding:8px 16px;display:none;align-items:center;gap:8px;font-size:12.5px;box-shadow:0 2px 10px rgba(0,0,0,.25);white-space:nowrap;max-width:calc(100% - 28px)}
+#spatial-root .ss-toast.show{display:flex}
+#spatial-root .ss-toast.err{background:rgba(179,38,30,.94)}
+#spatial-root .leaflet-popup-content-wrapper{border-radius:var(--radius-sm);padding:0}
+#spatial-root .leaflet-popup-content{margin:0;padding:11px 13px;font-family:inherit;min-width:170px}
+#spatial-root .ss-pop-t{font-size:12.5px;font-weight:700;color:var(--ink)}
+#spatial-root .ss-pop-s{font-size:10.5px;color:var(--ink-mute);margin-top:2px}
+#spatial-root .ss-divicon{background:transparent;border:none}
+#spatial-root .ss-pin{width:22px;height:22px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}
+#spatial-root .ss-pin i{transform:rotate(45deg);color:#fff;font-size:10px}
+#spatial-root .ss-pin.sel{box-shadow:0 0 0 4px rgba(34,136,131,.35),0 1px 4px rgba(0,0,0,.35)}
+
+/* ─── Floating panel base (docked cards over the map) ─── */
+#spatial-root .float{position:absolute;z-index:850;width:var(--float-w);max-height:calc(100% - 28px);background:var(--surface-2);border-radius:var(--radius);box-shadow:var(--shadow-float);border:1px solid var(--hairline);display:flex;flex-direction:column;overflow:hidden}
+#spatial-root .float.hidden{display:none}
+
+/* ═══ VIEW TABS (Map / Layout / per-layer Attribute Tables) ═══ */
+/* ArcGIS Pro-style: a tab strip above the canvas switches the WHOLE canvas
+   area between the live Map, the Layout page, and any number of open
+   Attribute Table tabs (one per layer, closable) - the rail (Layers
+   checkboxes) and ribbon stay visible and usable throughout, only the
+   content of .ss-canvas swaps. "Map" has no .canvas-view of its own - it's
+   just whatever's left visible when no other tab's overlay is showing. */
+#spatial-root .view-tabs{display:flex;gap:2px;padding:0 14px;background:var(--surface-2);border-bottom:1px solid var(--hairline);flex-shrink:0;overflow-x:auto}
+#spatial-root .view-tab{display:flex;align-items:center;gap:6px;padding:8px 10px 8px 16px;font-size:12.5px;font-weight:600;color:var(--ink-mute);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;flex-shrink:0}
+#spatial-root .view-tab:hover{color:var(--ink-3)}
+#spatial-root .view-tab.active{color:var(--ink);border-bottom-color:var(--blue)}
+#spatial-root .view-tab-close{border:none;background:transparent;color:inherit;opacity:.6;cursor:pointer;padding:2px;border-radius:4px;font-size:10px;display:flex}
+#spatial-root .view-tab-close:hover{opacity:1;background:rgba(10,10,10,.08)}
+
+/* Shared shell for anything that takes over .ss-canvas via a view tab
+   (Layout, Attribute Tables, ...) - fills the same real estate the map
+   normally gets, not a sidebar, not a viewport takeover. */
+#spatial-root .canvas-view{position:absolute;inset:0;z-index:500;background:var(--surface);display:flex;flex-direction:column}
+#spatial-root .canvas-view.hidden{display:none}
+
+/* ═══ LAYOUT DESIGNER ═══ */
+#spatial-root .layout-toolbar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--hairline);background:var(--surface-2);flex-wrap:wrap;flex-shrink:0}
+#spatial-root .layout-toolbar-group{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-mute)}
+#spatial-root .layout-toolbar select,#spatial-root .layout-toolbar input[type=text]{font-size:12.5px;padding:6px 9px;border:1px solid var(--hairline);border-radius:var(--radius-sm);background:var(--surface);color:var(--ink-3)}
+#spatial-root .layout-page-wrap{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:28px;background:#ccccc4}
+#spatial-root .layout-page-wrap canvas{background:#fff;box-shadow:0 6px 28px rgba(10,10,10,.28);max-width:100%;max-height:100%;object-fit:contain}
+#spatial-root .float-head{display:flex;align-items:center;justify-content:space-between;padding:12px 13px 10px;border-bottom:1px solid var(--hairline);flex-shrink:0;gap:8px}
+#spatial-root .float-title{font-size:13px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:7px}
+#spatial-root .float-close{width:22px;height:22px;border-radius:50%;border:none;background:rgba(10,10,10,.05);color:var(--ink-mute);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;transition:background .15s;flex-shrink:0}
+#spatial-root .float-close:hover{background:rgba(10,10,10,.1);color:var(--ink)}
+#spatial-root .float-body{overflow-y:auto;padding:12px 13px 14px;flex:1;min-height:20px}
+#spatial-root .float-tabs{display:none;border-bottom:1px solid var(--hairline);flex-shrink:0}
+#spatial-root .float-tab{flex:1;text-align:center;font-size:11.5px;font-weight:600;padding:9px 6px;color:var(--ink-mute);cursor:pointer;border-bottom:2px solid transparent}
+#spatial-root .tab-divider{flex:0 0 auto;width:1px;align-self:stretch;background:var(--hairline);margin:8px 1px}
+#spatial-root .float-tab.active{color:var(--ink);border-bottom-color:var(--blue)}
+#spatial-root .field{margin-bottom:10px}
+#spatial-root .field label{display:block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-mute);margin-bottom:4px}
+#spatial-root .field input[type=text],#spatial-root .field input[type=number],#spatial-root .field input[type=email],#spatial-root .field select,#spatial-root .field textarea{width:100%;font-size:12.5px;padding:7px 9px;border:1px solid var(--hairline);border-radius:var(--radius-sm);background:var(--surface);color:var(--ink-3)}
+#spatial-root .field textarea{resize:vertical;min-height:50px}
+#spatial-root .field input:focus,#spatial-root .field select:focus,#spatial-root .field textarea:focus{outline:none;border-color:var(--blue)}
+#spatial-root .field-row{display:flex;gap:8px}
+#spatial-root .field-row .field{flex:1}
+#spatial-root .check-row{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-3);padding:5px 0;cursor:pointer}
+#spatial-root .check-row input{accent-color:var(--blue);width:13px;height:13px;cursor:pointer}
+#spatial-root .badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+#spatial-root .b-blue{background:var(--blue-lt);color:var(--blue-dk)}
+#spatial-root .b-green{background:var(--green-lt);color:var(--green-dk)}
+#spatial-root .b-amber{background:var(--amber-lt);color:var(--amber-dk)}
+#spatial-root .b-purple{background:var(--purple-lt);color:#3a3391}
+#spatial-root .b-signal{background:var(--signal-soft);color:var(--signal-dark)}
+#spatial-root .hint{font-size:11px;color:var(--ink-mute);line-height:1.5}
+#spatial-root .divider-line{height:1px;background:var(--hairline);margin:11px 0}
+#spatial-root .help-section{border-bottom:1px solid var(--hairline)}
+#spatial-root .help-section summary{cursor:pointer;font-weight:700;font-size:12px;color:var(--ink);padding:9px 4px;list-style:none;user-select:none}
+#spatial-root .help-section summary::-webkit-details-marker{display:none}
+#spatial-root .help-section summary::before{content:"▸";display:inline-block;width:12px;font-size:10px;color:var(--ink-mute);transition:transform .15s}
+#spatial-root .help-section[open] summary::before{transform:rotate(90deg)}
+#spatial-root .help-field{padding:5px 4px 8px 20px;font-size:11.5px;line-height:1.5}
+#spatial-root .help-field b{color:var(--ink-3);font-weight:700;display:block}
+#spatial-root .help-field span{color:var(--ink-mute);display:block;margin-top:1px}
+
+#spatial-root .layer-row{display:flex;align-items:center;gap:8px;padding:6px 4px;border-radius:8px}
+#spatial-root .layer-row:hover{background:rgba(10,10,10,.04)}
+#spatial-root .layer-swatch{width:11px;height:11px;border-radius:3px;flex-shrink:0;border:1px solid rgba(0,0,0,.12)}
+#spatial-root .layer-name{flex:1;font-size:12.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#spatial-root .layer-count{font-size:11px;color:var(--ink-mute);flex-shrink:0}
+#spatial-root .layer-row input{accent-color:var(--blue);width:14px;height:14px;cursor:pointer;flex-shrink:0}
+#spatial-root .attr-table-btn{border:none;background:transparent;color:var(--ink-mute);cursor:pointer;padding:2px 4px;font-size:11px;flex-shrink:0;border-radius:4px}
+#spatial-root .attr-table-btn:hover{background:rgba(10,10,10,.08);color:var(--ink)}
+
+/* Query / Process dock */
+#spatial-root .dock{top:14px;left:14px}
+#spatial-root .results-list{margin-top:2px}
+#spatial-root .result-row{padding:8px 8px;border-radius:8px;cursor:pointer;font-size:12px;transition:background .15s}
+#spatial-root .result-row:hover{background:rgba(10,10,10,.04)}
+#spatial-root .result-row.sel{background:var(--blue-lt)}
+#spatial-root .result-title{font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#spatial-root .result-meta{color:var(--ink-mute);font-size:10.5px;margin-top:1px;display:flex;gap:6px;align-items:center}
+#spatial-root .empty-note{font-size:12px;color:var(--ink-mute);padding:14px 4px;text-align:center}
+#spatial-root .proc-card{border:1px solid var(--hairline);border-radius:var(--radius-sm);padding:10px;margin-bottom:10px}
+#spatial-root .proc-card h4{margin:0 0 7px;font-size:12px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:6px}
+#spatial-root .proc-readout{font-size:12px;color:var(--ink-3);background:rgba(10,10,10,.035);border-radius:8px;padding:7px 9px;margin-top:6px;font-family:Consolas,'SFMono-Regular',monospace}
+
+/* Feature detail panel (right side) */
+#spatial-root .detail{top:14px;right:14px;width:320px}
+#spatial-root .kv-row{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:12px;border-bottom:1px solid var(--hairline)}
+#spatial-root .kv-row:last-child{border-bottom:none}
+#spatial-root .kv-l{color:var(--ink-mute);flex-shrink:0}
+#spatial-root .kv-v{font-weight:600;color:var(--ink);text-align:right;word-break:break-word}
+#spatial-root .kv-v a{color:var(--blue);text-decoration:underline}
+#spatial-root .props-table{width:100%;border-collapse:collapse;margin-top:4px;font-size:11.5px}
+#spatial-root .props-table td{padding:3px 4px;border-bottom:1px solid var(--hairline);vertical-align:top}
+#spatial-root .props-table td:first-child{color:var(--ink-mute);width:40%;word-break:break-word}
+#spatial-root .props-table td:last-child{color:var(--ink-3);word-break:break-word}
+#spatial-root .detail-actions{display:flex;gap:7px;margin-top:10px}
+#spatial-root .detail-actions .btn{flex:1;justify-content:center}
+#spatial-root .share-row{display:flex;align-items:center;gap:7px;padding:5px 0;font-size:11.5px}
+#spatial-root .share-row .su{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#spatial-root .share-row .sx{background:none;border:none;color:var(--ink-mute);cursor:pointer;font-size:11px;padding:2px 4px}
+#spatial-root .share-row .sx:hover{color:#b3261e}
+#spatial-root .section-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-mute);margin:12px 0 6px}
+#spatial-root .section-label:first-child{margin-top:0}
+
+/* Draw popover */
+#spatial-root .draw-pop{top:52px;right:14px;width:180px}
+#spatial-root .draw-opt{display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:8px;cursor:pointer;font-size:12.5px;color:var(--ink-3)}
+#spatial-root .draw-opt:hover{background:rgba(10,10,10,.05)}
+#spatial-root .draw-opt.active{background:var(--blue);color:#fff}
+#spatial-root .draw-opt i{width:14px;text-align:center;font-size:12px}
+
+/* Modal */
+#spatial-root .modal-scrim{position:fixed;inset:0;background:rgba(10,10,10,.45);z-index:2000;display:none;align-items:center;justify-content:center;padding:20px}
+#spatial-root .modal-scrim.show{display:flex}
+#spatial-root .modal{width:420px;max-width:100%;max-height:88vh;background:var(--surface-2);border-radius:var(--radius);box-shadow:var(--shadow-float);display:flex;flex-direction:column;overflow:hidden}
+#spatial-root .modal.modal-wide{width:760px}
+#spatial-root .attr-table{width:100%;border-collapse:collapse;font-size:12px}
+#spatial-root .attr-table th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-mute);padding:6px 8px;border-bottom:1px solid var(--hairline);position:sticky;top:0;background:var(--surface-2)}
+#spatial-root .attr-table td{padding:7px 8px;border-bottom:1px solid var(--hairline);color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+#spatial-root .attr-table tr{cursor:pointer}
+#spatial-root .attr-table tr:hover td{background:rgba(10,10,10,.035)}
+#spatial-root .modal-head{display:flex;align-items:center;justify-content:space-between;padding:15px 17px;border-bottom:1px solid var(--hairline);flex-shrink:0}
+#spatial-root .modal-title{font-size:14.5px;font-weight:700;color:var(--ink)}
+#spatial-root .modal-body{overflow-y:auto;padding:15px 17px;flex:1}
+#spatial-root .modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:13px 17px;border-top:1px solid var(--hairline);flex-shrink:0}
+#spatial-root .import-summary{font-size:12px;color:var(--ink-3);background:rgba(10,10,10,.035);border-radius:8px;padding:10px 11px;margin-bottom:10px}
+#spatial-root .import-fail{font-size:11px;color:#b3261e;padding:2px 0}
+
+/* Edit-mode banner */
+#spatial-root .edit-bar{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:1300;background:var(--ink);color:#fafaf6;border-radius:999px;padding:9px 10px 9px 16px;display:none;align-items:center;gap:12px;font-size:12.5px;box-shadow:var(--shadow-float)}
+#spatial-root .edit-bar.show{display:flex}
+#spatial-root .edit-bar .btn{background:rgba(255,255,255,.14);color:#fff}
+#spatial-root .edit-bar .btn:hover{background:rgba(255,255,255,.22)}
+#spatial-root .edit-bar .btn-primary{background:var(--signal)}
+
+#spatial-root .geobar{position:absolute;left:10px;bottom:10px;z-index:800;background:rgba(15,23,42,.78);color:#d8dde6;font-family:Consolas,'SFMono-Regular',monospace;font-size:10.5px;padding:5px 10px;border-radius:6px;pointer-events:none;display:flex;gap:12px;backdrop-filter:blur(4px)}
+#spatial-root .leaflet-tooltip.feature-label{background:var(--label-bg,rgba(255,255,255,.9));border:1px solid var(--label-border,rgba(10,10,10,.18));border-radius:4px;padding:1px 6px;font-size:var(--label-font-size,10.5px);font-weight:var(--label-font-weight,700);font-style:var(--label-font-style,normal);color:var(--label-color,#2a2a26);box-shadow:none;pointer-events:none;white-space:nowrap;text-shadow:none}
+#spatial-root.label-style-halo .leaflet-tooltip.feature-label{background:transparent;border:none;padding:0;text-shadow:var(--label-halo-shadow,-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff,0 0 3px #fff)}
+#spatial-root.label-style-plain .leaflet-tooltip.feature-label{background:transparent;border:none;padding:0}
+#spatial-root .leaflet-tooltip-right.feature-label::before,
+#spatial-root .leaflet-tooltip-left.feature-label::before{display:none}
+#spatial-root .geobar span b{color:#fff;font-weight:600}
+
+@media(max-width:900px){
+  #spatial-root .app-rail{position:absolute;top:0;left:0;bottom:0;z-index:1200;transform:translateX(-100%);transition:transform .18s ease;box-shadow:8px 0 24px -8px rgba(10,10,10,.25)}
+  #spatial-root .app-rail.open{transform:translateX(0)}
+  #spatial-root .ss-main{width:100%}
+  #spatial-root .rail-toggle-mobile{display:inline-flex!important}
+  #spatial-root .float{width:min(var(--float-w),86vw)}
+  #spatial-root .detail{width:min(320px,86vw)}
+}
+@media(max-width:640px){
+  #spatial-root .ss-title{display:none}
+  #spatial-root .ss-search input{width:110px}
+  #spatial-root .ss-search input:focus{width:150px}
+}
+#spatial-root .rail-toggle-mobile{display:none}
+</style>
+
+<div id="spatial-root">
+  <div class="ss-ribbon">
+    <div class="ss-ribbon-l">
+      <button class="btn btn-sm rail-toggle-mobile" id="railToggleMobile"><i class="fa-solid fa-bars"></i></button>
+      <div class="ss-dot"></div>
+      <div class="ss-title">Map Viewer</div>
+      <div class="ss-badge" id="ssSummaryBadge"><i class="fa-solid fa-layer-group"></i>&nbsp;— layers · — features</div>
+      <div class="ss-search">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" id="ssSearch" placeholder="Search by title…">
+      </div>
+    </div>
+    <div class="ss-ribbon-r">
+      <button class="btn btn-sm" id="btnQuery" title="Query & filter"><i class="fa-solid fa-filter"></i>Query</button>
+      <button class="btn btn-sm" id="btnProcess" title="Geoprocessing"><i class="fa-solid fa-wand-magic-sparkles"></i>Geoprocessing</button>
+      <div class="ribbon-divider"></div>
+      <button class="btn btn-sm" id="btnDraw" title="Draw a new feature"><i class="fa-solid fa-pencil"></i>Draw</button>
+      <button class="btn btn-sm" id="btnImport" title="Import GeoJSON, Shapefile, KML, GPX or CSV"><i class="fa-solid fa-file-import"></i>Import</button>
+      <button class="btn btn-sm" id="btnExport" title="Export — choose layers and format"><i class="fa-solid fa-file-export"></i>Export</button>
+      <div class="ribbon-divider"></div>
+      <button class="btn btn-sm" id="btnHelp" title="Field-by-field reference for every tool"><i class="fa-solid fa-circle-question"></i>Help</button>
+    </div>
+  </div>
+
+  <!-- Golden Layout builds the dockable Contents / Map / Properties
+       workspace inside here at boot - see setupGoldenLayout(). The three
+       panels' actual content lives in the detached holders below
+       (#ssRail, #mapAreaHolder, #panelDetail), moved in (not cloned) so
+       every existing event listener survives the move untouched. -->
+  <div id="glContainer"></div>
+
+  <nav class="app-rail" id="ssRail" style="display:none">
+    <div class="rail-brand">
+      <div class="rail-brand-mark"><i class="fa-solid fa-map-location-dot"></i></div>
+      <div class="rail-brand-name">Map Viewer</div>
+    </div>
+    <div class="rail-nav">
+      <div class="rail-group">
+        <a class="rail-link active" href="/map-viewer"><i class="fa-solid fa-earth-africa"></i>Map Viewer</a>
+        <a class="rail-link" href="/app/upande-spatial"><i class="fa-solid fa-gauge"></i>Desk Workspace</a>
+      </div>
+      <div class="rail-group">
+        <div class="rail-group-label">Basemap</div>
+        <div class="field" style="padding:0 0 10px">
+          <select id="basemapSelect">
+            <option value="street">Street (OpenStreetMap)</option>
+            <option value="satellite">Satellite (Esri)</option>
+          </select>
+        </div>
+      </div>
+      <div class="rail-group">
+        <div class="rail-group-label">Layers</div>
+        <div class="field">
+          <select id="farmFilter"><option value="">All farms</option></select>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;padding:0 0 8px"><label class="check-row" style="padding:0;flex:1"><input type="checkbox" id="labelsToggle" checked>Show labels on map</label><button class="btn-icon" id="labelSettingsBtn" title="Label style settings" style="border:1px solid var(--hairline);border-radius:6px;width:26px;height:26px;background:var(--surface-2);cursor:pointer;flex-shrink:0"><i class="fa-solid fa-sliders" style="font-size:11px"></i></button></div>
+        <div id="layerRows"><div class="empty-note">Loading layers…</div></div>
+      </div>
+    </div>
+    <div class="rail-foot"><i class="fa-solid fa-circle" style="color:var(--signal)"></i>Live spatial data</div>
+  </nav>
+
+  <div id="mapAreaHolder" style="display:none">
+    <div class="view-tabs">
+      <div class="view-tab active" data-view="map" id="viewTabMap"><i class="fa-solid fa-map"></i>Map</div>
+      <div class="view-tab" data-view="layout" id="viewTabLayout"><i class="fa-solid fa-print"></i>Layout</div>
+    </div>
+
+    <div class="ss-canvas">
+      <div class="ss-canvas-el" id="ssMapEl"></div>
+      <div class="ss-loading" id="ssLoading"><div class="ss-spinner"></div><span>Loading spatial features…</span></div>
+      <div class="ss-toast" id="ssToast"></div>
+      <div class="geobar" id="ssGeobar"><span id="geoZoom">Zoom —</span><span id="geoLL">— , —</span></div>
+
+      <div class="edit-bar" id="editBar">
+        <span><i class="fa-solid fa-draw-polygon"></i>&nbsp; Editing geometry — drag points, then Save</span>
+        <button class="btn btn-sm" id="editCancelBtn">Cancel</button>
+        <button class="btn btn-sm btn-primary" id="editSaveBtn"><i class="fa-solid fa-check"></i>Save</button>
+      </div>
+
+      <!-- QUERY / PROCESS DOCK -->
+      <div class="float dock hidden" id="panelDock">
+        <div class="float-head">
+          <div class="float-title"><i class="fa-solid fa-filter"></i><span id="dockTitle">Query</span></div>
+          <button class="float-close" data-close="panelDock"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="float-tabs">
+          <div class="float-tab active" data-tab="query">Query</div>
+          <div class="float-tab" data-tab="process">Geoprocessing</div>
+          <div class="float-tab" data-tab="help">Help</div>
+        </div>
+        <div class="float-body dock-tab-content" id="tabQuery" data-tab-content="query">
+          <div class="field">
+            <label>Reference doctype</label>
+            <select id="qRefDoctype"><option value="">Any</option></select>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Geometry type</label>
+              <select id="qGeomType">
+                <option value="">Any</option>
+                <option>Point</option><option>MultiPoint</option>
+                <option>LineString</option><option>MultiLineString</option>
+                <option>Polygon</option><option>MultiPolygon</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Layer</label>
+              <select id="qLayer"><option value="">Any</option></select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Source module</label>
+            <select id="qSourceModule"><option value="">Any</option></select>
+          </div>
+          <label class="check-row"><input type="checkbox" id="qBboxToggle">Only features in current map view</label>
+          <div class="divider-line"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span class="section-label" style="margin:0">Results <span id="qResultCount"></span></span>
+            <button class="btn btn-sm" id="qClearBtn">Clear</button>
+          </div>
+          <div class="results-list" id="qResults"><div class="empty-note">No filters applied — showing nothing to keep this list short. Set a filter or search above.</div></div>
+        </div>
+        <div class="float-body dock-tab-content" id="tabProcess" data-tab-content="process" style="display:none">
+          <div class="proc-card">
+            <h4><i class="fa-solid fa-ruler-combined" style="color:var(--blue)"></i>Buffer</h4>
+            <div class="hint" id="bufSourceHint">Click a feature on the map to use it as the buffer source.</div>
+            <div class="field" style="margin-top:8px"><label>Distance (m)</label><input type="number" id="bufDistance" value="50" min="1"></div>
+            <div style="display:flex;gap:7px">
+              <button class="btn btn-sm" id="bufPreviewBtn" style="flex:1;justify-content:center" disabled>Preview</button>
+              <button class="btn btn-sm btn-primary" id="bufSaveBtn" style="flex:1;justify-content:center" disabled>Save as feature</button>
+            </div>
+          </div>
+          <div class="proc-card">
+            <h4><i class="fa-solid fa-ruler" style="color:var(--green)"></i>Measure distance</h4>
+            <div style="display:flex;gap:7px;margin-top:8px">
+              <button class="btn btn-sm" id="measStartBtn" style="flex:1;justify-content:center">Start</button>
+              <button class="btn btn-sm" id="measClearBtn" style="flex:1;justify-content:center">Clear</button>
+            </div>
+            <div class="proc-readout" id="measReadout">0 points · 0 m</div>
+          </div>
+          <div class="proc-card">
+            <h4><i class="fa-solid fa-crosshairs" style="color:var(--purple)"></i>Centroid</h4>
+            <div class="hint" id="centSourceHint">Select a Polygon/MultiPolygon feature to compute its centroid.</div>
+            <div style="display:flex;gap:7px;margin-top:8px">
+              <button class="btn btn-sm" id="centComputeBtn" style="flex:1;justify-content:center" disabled>Compute</button>
+              <button class="btn btn-sm btn-primary" id="centSaveBtn" style="flex:1;justify-content:center" disabled>Save as feature</button>
+            </div>
+            <div class="proc-readout" id="centReadout" style="display:none"></div>
+          </div>
+          <div class="proc-card">
+            <h4><i class="fa-solid fa-shapes" style="color:var(--amber)"></i>Area / Length</h4>
+            <div class="proc-readout" id="alReadout">No feature selected.</div>
+          </div>
+
+          <div class="divider-line"></div>
+          <div class="section-label">Vector tools</div>
+
+          <div class="proc-card">
+            <h4><i class="fa-solid fa-scissors" style="color:var(--amber)"></i>Clip</h4>
+            <div class="field" style="margin-top:8px"><label>Feature A (to clip)</label><select id="gpClipA"></select></div>
+            <div class="field"><label>Feature B (clip boundary — polygon)</label><select id="gpClipB"></select></div>
+            <div style="display:flex;gap:7px">
+              <button class="btn btn-sm" id="gpClipPreviewBtn" style="flex:1;justify-content:center">Preview</button>
+              <button class="btn btn-sm btn-primary" id="gpClipSaveBtn" style="flex:1;justify-content:center" disabled>Save as feature</button>
+            </div>
+          </div>
+
+          <div class="proc-card">
+            <h4><i class="fa-solid fa-object-group" style="color:var(--blue)"></i>Union</h4>
+            <div class="field" style="margin-top:8px"><label>Feature A (polygon)</label><select id="gpUnionA"></select></div>
+            <div class="field"><label>Feature B (polygon)</label><select id="gpUnionB"></select></div>
+            <div style="display:flex;gap:7px">
+              <button class="btn btn-sm" id="gpUnionPreviewBtn" style="flex:1;justify-content:center">Preview</button>
+              <button class="btn btn-sm btn-primary" id="gpUnionSaveBtn" style="flex:1;justify-content:center" disabled>Save as feature</button>
+            </div>
+          </div>
+
+          <div class="proc-card">
+            <h4><i class="fa-solid fa-layer-group" style="color:var(--green)"></i>Merge</h4>
+            <div class="field" style="margin-top:8px"><label>Feature A</label><select id="gpMergeA"></select></div>
+            <div class="field"><label>Feature B</label><select id="gpMergeB"></select></div>
+            <div style="display:flex;gap:7px">
+              <button class="btn btn-sm" id="gpMergePreviewBtn" style="flex:1;justify-content:center">Preview</button>
+              <button class="btn btn-sm btn-primary" id="gpMergeSaveBtn" style="flex:1;justify-content:center" disabled>Save as feature</button>
+            </div>
+          </div>
+
+          <div class="proc-card">
+            <h4><i class="fa-solid fa-code-branch" style="color:var(--purple)"></i>Spatial Join</h4>
+            <div class="field" style="margin-top:8px"><label>Source feature</label><select id="gpJoinSource"></select></div>
+            <div class="field-row">
+              <div class="field"><label>Relation</label><select id="gpJoinPredicate"><option value="intersects">Intersects</option><option value="within">Source within target</option><option value="contains">Source contains target</option></select></div>
+              <div class="field"><label>Target layer</label><select id="gpJoinLayer"></select></div>
+            </div>
+            <button class="btn btn-sm btn-primary" id="gpJoinRunBtn" style="width:100%;justify-content:center">Run join</button>
+            <div id="gpJoinResult"></div>
+          </div>
+
+          <div class="proc-card">
+            <h4><i class="fa-solid fa-fire" style="color:#b3261e"></i>Heatmap / Density</h4>
+            <div class="field" style="margin-top:8px"><label>Point layer</label><select id="gpHeatLayer"></select></div>
+            <div class="field-row">
+              <div class="field"><label>Radius (px)</label><input type="number" id="gpHeatRadius" value="25" min="5" max="100"></div>
+              <div class="field"><label>Blur (px)</label><input type="number" id="gpHeatBlur" value="15" min="0" max="60"></div>
+            </div>
+            <label class="check-row"><input type="checkbox" id="gpHeatShow">Show heatmap on map</label>
+          </div>
+
+          <div class="proc-card">
+            <h4><i class="fa-solid fa-layer-group" style="color:#854F0B"></i>Weighted Overlay</h4>
+            <div class="field" style="margin-top:8px"><label>Layer A</label><select class="wo-layer" id="woLayerA"></select></div>
+            <div class="field-row">
+              <div class="field"><label>Weight A</label><input type="number" id="woWeightA" value="0.5" min="0" max="1" step="0.05"></div>
+              <div class="field"><label>Score source</label><select id="woModeA"><option value="uniform">Fixed value</option><option value="property">Property</option></select></div>
+            </div>
+            <div class="field-row">
+              <div class="field" id="woFixedAField"><label>Score for every zone in A</label><input type="number" id="woFixedA" value="1"></div>
+              <div class="field" id="woPropAField" style="display:none"><label>Numeric property</label><select id="woPropA"></select></div>
+            </div>
+            <div class="divider-line"></div>
+            <div class="field"><label>Layer B</label><select class="wo-layer" id="woLayerB"></select></div>
+            <div class="field-row">
+              <div class="field"><label>Weight B</label><input type="number" id="woWeightB" value="0.5" min="0" max="1" step="0.05"></div>
+              <div class="field"><label>Score source</label><select id="woModeB"><option value="uniform">Fixed value</option><option value="property">Property</option></select></div>
+            </div>
+            <div class="field-row">
+              <div class="field" id="woFixedBField"><label>Score for every zone in B</label><input type="number" id="woFixedB" value="1"></div>
+              <div class="field" id="woPropBField" style="display:none"><label>Numeric property</label><select id="woPropB"></select></div>
+            </div>
+            <div style="display:flex;gap:7px">
+              <button class="btn btn-sm" id="woRunBtn" style="flex:1;justify-content:center">Run overlay</button>
+              <button class="btn btn-sm btn-primary" id="woSaveBtn" style="flex:1;justify-content:center" disabled>Save results</button>
+            </div>
+            <div id="woResult"></div>
+          </div>
+        </div>
+
+        <div class="float-body dock-tab-content" id="tabHelp" data-tab-content="help" style="display:none">
+          <details class="help-section" open>
+            <summary>Layers (left sidebar)</summary>
+            <div class="help-field"><b>Basemap</b><span>Street (OpenStreetMap) or Satellite (Esri World Imagery) - switch to Satellite to trace real-world features (farm boundaries, buildings, roads) as a digitizing reference when creating your own data.</span></div><div class="help-field"><b>Farm</b><span>Restricts every layer on the map to one farm, or shows all farms.</span></div>
+            <div class="help-field"><b>Show labels on map</b><span>Toggles permanent on-map text labels (each feature's title) on or off. When off, you only see a feature's title by clicking it.</span></div><div class="help-field"><b>Label style (sliders icon)</b><span>Font size, weight, italic, text color, and a Boxed/Halo/Plain background style (Halo - a white text outline with no box - reads best over the Satellite basemap). Changes apply live as you adjust them.</span></div>
+            <div class="help-field"><b>Layer checkbox</b><span>Shows or hides that layer's features on the map. Doesn't affect Query, Export, or other tools — those work from all loaded data regardless of visibility.</span></div>
+            <div class="help-field"><b>Table icon</b><span>Opens an Attribute Table tab listing every feature in that layer — no filtering needed first.</span></div>
+            <div class="help-field"><b>Sliders icon</b><span>Opens Layer Properties — lets you change the layer's display color.</span></div>
+          </details>
+
+          <details class="help-section">
+            <summary>Query tab</summary>
+            <div class="help-field"><b>Search by title…</b><span>Filters the map and results list by feature title as you type.</span></div>
+            <div class="help-field"><b>Reference doctype</b><span>Shows only features linked to a specific business record type (Farm, Warehouse, ...), or Any.</span></div>
+            <div class="help-field"><b>Geometry type</b><span>Restricts results to one geometry kind — Point, LineString, Polygon, etc.</span></div>
+            <div class="help-field"><b>Layer</b><span>Restricts results to one specific layer.</span></div>
+            <div class="help-field"><b>Source module</b><span>Restricts results to features created by a specific tool (e.g. "Map Viewer Import", "Map Viewer EPANET Plugin").</span></div>
+            <div class="help-field"><b>Only features in current map view</b><span>Limits results to whatever's inside the map's current pan/zoom bounds.</span></div>
+            <div class="help-field"><b>Clear</b><span>Resets every filter above.</span></div>
+            <div class="help-field"><b>Results list</b><span>Only populates once at least one filter above is set (kept empty otherwise so it doesn't dump hundreds of rows by default). Click a row to select and view that feature.</span></div>
+          </details>
+
+          <details class="help-section">
+            <summary>Draw &amp; New Feature</summary>
+            <div class="help-field"><b>Point / Line / Polygon / Rectangle</b><span>Pick a shape, then draw it directly on the map. Finishing a shape opens the New Feature form.</span></div>
+            <div class="help-field"><b>Title</b><span>The name shown on the map (as a label, if labels are on) and everywhere this feature is listed.</span></div>
+            <div class="help-field"><b>Reference doctype / Reference name</b><span>Optionally link this shape to an existing business record instead of leaving it standalone. Reference doctype lists every doctype registered in Spatial Entity Config (not just ones already in use), and Reference name is a live picker of that doctype's real records (e.g. Farm → "Kapkolia") — no free-typing, no typos.</span></div>
+            <div class="help-field"><b>Feature role</b><span>Distinguishes multiple features on the same reference record — e.g. a Farm's Boundary vs. its Gate. Leave blank for a single, unambiguous feature per record.</span></div>
+            <div class="help-field"><b>Farm</b><span>Tags this feature so the sidebar's Farm filter can find it.</span></div>
+            <div class="help-field"><b>Notes</b><span>Free-text notes shown in the feature's detail panel.</span></div>
+          </details>
+
+          <details class="help-section">
+            <summary>Import</summary>
+            <div class="help-field"><b>File</b><span>Accepts GeoJSON/.json, Shapefile (as a .zip of .shp/.dbf/.prj — a lone .shp loses attributes and coordinate projection), KML/KMZ, GPX, or CSV with latitude/longitude columns.</span></div>
+            <div class="help-field"><b>Default reference doctype</b><span>Used only for an incoming feature that carries no reference of its own.</span></div>
+            <div class="help-field"><b>Default farm</b><span>Fallback farm tag applied to incoming features that don't already specify one.</span></div>
+            <div class="help-field"><b>Source module tag</b><span>Label stamped onto every imported feature, so you can find or filter them later (Query tab's Source module filter).</span></div>
+          </details>
+
+          <details class="help-section">
+            <summary>Export</summary>
+            <div class="help-field"><b>Format</b><span>GeoJSON and KML keep every geometry type and property. GPX turns points into waypoints and lines into tracks but can't represent polygons (skipped). CSV is points-only (lat/lon + flattened properties); lines and polygons are skipped. Shapefile export isn't available — no dependable no-build-step library for writing one exists yet (import still supports it).</span></div>
+            <div class="help-field"><b>Layers / All / None</b><span>Choose exactly which layers' features are included in the download, independent of what's currently checked in the sidebar.</span></div>
+          </details>
+
+          <details class="help-section">
+            <summary>Geoprocessing — Buffer, Measure, Centroid, Area/Length</summary>
+            <div class="help-field"><b>Buffer — Distance (m)</b><span>How far out to expand a ring around the currently selected feature.</span></div>
+            <div class="help-field"><b>Buffer — Preview / Save as feature</b><span>Preview draws the ring on the map without saving; Save keeps it as a new standalone feature.</span></div>
+            <div class="help-field"><b>Measure distance — Start / Clear</b><span>Start begins recording map clicks into a line, showing the running total distance live. Clear resets it.</span></div>
+            <div class="help-field"><b>Centroid — Compute / Save as feature</b><span>Compute finds the geometric center point of the selected Polygon/MultiPolygon; Save keeps that point as a new feature.</span></div>
+            <div class="help-field"><b>Area / Length</b><span>Read-only, server-computed size of whatever feature is currently selected.</span></div>
+          </details>
+
+          <details class="help-section">
+            <summary>Geoprocessing — Clip, Union, Merge, Spatial Join</summary>
+            <div class="help-field"><b>Clip — Feature A / Feature B</b><span>Cuts A down to the part that falls inside polygon B. Exact for polygon or point A; for line geometry, A is clipped to B's bounding box only (an approximation, not a true boundary clip).</span></div>
+            <div class="help-field"><b>Union — Feature A / Feature B</b><span>Merges two overlapping polygons into one combined shape. Both inputs must be polygons.</span></div>
+            <div class="help-field"><b>Merge — Feature A / Feature B</b><span>Combines two features of the same geometry family (both points, both lines, or both polygons) into one multi-part feature.</span></div>
+            <div class="help-field"><b>Spatial Join — Source feature</b><span>The feature whose spatial relationship to a layer you want to check.</span></div>
+            <div class="help-field"><b>Spatial Join — Relation</b><span>Intersects (touches or overlaps), Source within target, or Source contains target.</span></div>
+            <div class="help-field"><b>Spatial Join — Target layer</b><span>The layer to test every feature in. Read-only — results are listed, not saved.</span></div>
+          </details>
+
+          <details class="help-section">
+            <summary>Geoprocessing — Heatmap &amp; Weighted Overlay</summary>
+            <div class="help-field"><b>Heatmap — Point layer</b><span>Which point layer's density/clustering to visualize (incidents, sightings, etc.).</span></div>
+            <div class="help-field"><b>Heatmap — Radius / Blur</b><span>Radius controls how far each point's influence spreads in pixels; Blur softens the edges. Larger values merge nearby points into broader hotspots.</span></div>
+            <div class="help-field"><b>Weighted Overlay — Layer A / Layer B</b><span>The two polygon zone layers to combine (e.g. a flood buffer and a slope-risk zone). Must be two different layers with at least one polygon each.</span></div>
+            <div class="help-field"><b>Weighted Overlay — Weight</b><span>How much that layer counts toward the combined score (0–1). Doesn't have to sum to 1.</span></div>
+            <div class="help-field"><b>Weighted Overlay — Score source</b><span>"Fixed value" applies one score to every zone in that layer. "Property" reads an existing numeric field already on those features instead.</span></div>
+            <div class="help-field"><b>Weighted Overlay — Run overlay / Save results</b><span>Run previews the combined, colored zones on the map (this is a real geometric overlay — every overlap and leftover area is computed and correctly scored, not an approximation). Save keeps every resulting zone as a new feature carrying its combined score. For 3+ factors, save the result and overlay it again with the next layer.</span></div>
+          </details>
+
+          <details class="help-section">
+            <summary>Layout (print designer)</summary>
+            <div class="help-field"><b>Paper / Orientation</b><span>Sets the printed page size (A4/A3/Letter/Legal) and rotation.</span></div>
+            <div class="help-field"><b>Map title</b><span>Text banner printed at the top of the page. Leave blank to omit it.</span></div>
+            <div class="help-field"><b>Grid</b><span>Draws a latitude/longitude reference grid over the map, aligned to the coordinates actually shown.</span></div>
+            <div class="help-field"><b>Neatline</b><span>A decorative double-line border framing the map area.</span></div>
+            <div class="help-field"><b>Scale bar / North arrow</b><span>Standard cartographic elements — the scale bar's distance is computed from the current zoom level.</span></div>
+            <div class="help-field"><b>Legend / position</b><span>Lists currently visible layers and their colors, placed in the chosen page corner.</span></div>
+            <div class="help-field"><b>Refresh map</b><span>Re-captures the live map. Needed after panning, zooming, or changing layers/farm while this tab is open — the preview otherwise reuses the last capture for speed.</span></div>
+            <div class="help-field"><b>Format</b><span>PNG, JPG, or PDF — PDF fills the exact paper size chosen above.</span></div>
+          </details>
+
+          <details class="help-section">
+            <summary>Attribute Table &amp; Layer Properties</summary>
+            <div class="help-field"><b>Attribute Table search</b><span>Filters the open table by title or farm.</span></div>
+            <div class="help-field"><b>Attribute Table row click</b><span>Switches back to the Map tab, selects that feature, and zooms to it.</span></div>
+            <div class="help-field"><b>Layer Properties — Color</b><span>Updates every Spatial Entity Config row that uses this layer name, so the color stays consistent everywhere it's referenced — not just on this map session.</span></div>
+            <div class="help-field"><b>Layer Properties — Configuration list</b><span>Read-only: which doctype(s), feature role(s), and geometry type(s) actually map to this layer.</span></div>
+          </details>
+
+          <details class="help-section">
+            <summary>EPANET plugin (water network simulation)</summary>
+            <div class="help-field"><b>Network / Create</b><span>Pick an existing water network or create a new one to build on. A network isn't only ever a farm's network - set its owner type (Farm, Warehouse, Location, or anything else registered in Spatial Entity Config) and owner record so its own pipe network stays separate from every other owner's. The network dropdown narrows to the map's global farm filter only for Farm-owned networks; every other owner type (or no owner) always stays visible. Each network simulates completely independently regardless of what owns it.</span></div><div class="help-field"><b>Network options (gear icon)</b><span>Hydraulics (solver trials/accuracy, demand model), Time (duration and timesteps - 0 duration runs a single steady-state snapshot, anything above runs a real extended-period simulation), Water Quality (None/Chemical/Age/Trace analysis), Energy (pump price/efficiency), and Reactions (bulk/wall decay coefficients). Saved per network.</span></div>
+            <div class="help-field"><b>Add node — role / Place</b><span>Choose Junction, Tank, or Reservoir, click Place, then click the map to position it — a form for its hydraulic properties (elevation, demand, etc.) opens immediately after.</span></div>
+            <div class="help-field"><b>Add link — role / Draw</b><span>Choose Pipe, Pump, or Valve, click Draw, then click a start point and an end point. Moving the cursor within 5m of an existing node shows a dashed highlight ring around it — click while it's highlighted to connect exactly to that node's coordinate. Clicking with nothing highlighted leaves that end unconnected, and it gets skipped when you run the simulation.</span></div>
+            <div class="help-field"><b>Element list</b><span>Every node/link in the selected network, with a delete button for each.</span></div>
+            <div class="help-field"><b>Run simulation</b><span>Builds a hydraulic model from the network's elements and solves it with EPANET's engine.</span></div>
+            <div class="help-field"><b>Show results on map</b><span>Overlays the last simulation's results on the network geometry, with a color-ramp legend showing the active scale. Node color and Link color pick which result (Pressure/Head for nodes, Flow/Velocity for links) drives the ramp; pipe line-width still separately encodes flow magnitude.</span></div>
+          </details>
+        </div>
+
+      </div>
+
+      <!-- DRAW POPOVER -->
+      <div class="float draw-pop hidden" id="panelDraw">
+        <div class="float-head">
+          <div class="float-title"><i class="fa-solid fa-pencil"></i>Draw</div>
+          <button class="float-close" data-close="panelDraw"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="float-body" style="padding:8px">
+          <div class="draw-opt" data-mode="marker"><i class="fa-solid fa-map-pin"></i>Point / marker</div>
+          <div class="draw-opt" data-mode="polyline"><i class="fa-solid fa-timeline"></i>Line</div>
+          <div class="draw-opt" data-mode="polygon"><i class="fa-solid fa-draw-polygon"></i>Polygon</div>
+          <div class="draw-opt" data-mode="rectangle"><i class="fa-regular fa-square"></i>Rectangle</div>
+        </div>
+      </div>
+
+      <!-- LAYOUT DESIGNER — fills the same .ss-canvas real estate the map
+           normally occupies, switched to via the Map/Layout view tabs above
+           (ArcGIS Pro's own pattern), not a sidebar or a viewport takeover.
+           The rail (Layers checkboxes) and ribbon stay visible either way. -->
+      <div class="canvas-view hidden" id="layoutOverlay" data-view="layout">
+        <div class="layout-toolbar">
+          <div class="layout-toolbar-group">
+            <label>Paper</label>
+            <select id="layoutPaperSize"><option>A4</option><option>A3</option><option>Letter</option><option>Legal</option></select>
+            <select id="layoutOrientation"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select>
+          </div>
+          <input type="text" id="layoutTitle" placeholder="Map title" style="width:220px">
+          <label class="check-row"><input type="checkbox" id="layoutGrid" checked>Grid</label>
+          <label class="check-row"><input type="checkbox" id="layoutNeatline" checked>Neatline</label>
+          <label class="check-row"><input type="checkbox" id="layoutScale" checked>Scale bar</label>
+          <label class="check-row"><input type="checkbox" id="layoutNorth" checked>North arrow</label>
+          <div class="layout-toolbar-group">
+            <label class="check-row"><input type="checkbox" id="layoutLegend" checked>Legend</label>
+            <select id="layoutLegendPos"><option value="br">Bottom right</option><option value="bl">Bottom left</option><option value="tr">Top right</option><option value="tl">Top left</option></select>
+          </div>
+          <div class="ribbon-divider"></div>
+          <button class="btn btn-sm" id="layoutRefreshBtn" title="Re-capture the map (use after panning/zooming, or after changing layers on the Map tab)"><i class="fa-solid fa-rotate"></i>Refresh map</button>
+          <select id="layoutFormat"><option value="png">PNG</option><option value="jpg">JPG</option><option value="pdf">PDF</option></select>
+          <button class="btn btn-sm btn-primary" id="layoutExportBtn"><i class="fa-solid fa-download"></i>Export</button>
+          <span class="hint" id="layoutStatus" style="margin-left:auto"></span>
+        </div>
+        <div class="layout-page-wrap">
+          <canvas id="layoutCanvas"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FEATURE DETAIL PANEL - the always-on Properties panel, no longer a
+       floating popover: promoted to its own Golden Layout component. -->
+  <div class="detail props-panel" id="panelDetail" style="display:none">
+    <div class="float-head">
+      <div class="float-title"><i class="fa-solid fa-circle-info"></i>Properties</div>
+    </div>
+    <div class="float-body" id="detailBody"><div class="empty-note">Select a feature on the map to inspect it.</div></div>
+  </div>
+</div>
+
+<!-- NEW FEATURE MODAL -->
+<div class="modal-scrim" id="newFeatureScrim">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">New Feature</div><button class="float-close" id="newFeatureClose"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div class="field"><label>Title</label><input type="text" id="nfTitle" placeholder="e.g. North Gate"></div>
+      <div class="field-row">
+        <div class="field">
+          <label>Reference doctype</label>
+          <select id="nfRefDoctype"><option value="">— No reference (standalone) —</option></select>
+        </div>
+        <div class="field">
+          <label>Reference name</label>
+          <select id="nfRefName" disabled><option value="">— pick a reference doctype first —</option></select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Feature role</label><input type="text" id="nfRole" placeholder="e.g. Boundary, Gate, Location"></div>
+        <div class="field"><label>Farm</label><input type="text" id="nfFarm" list="farmDatalist" placeholder="e.g. Kapkolia"></div>
+      </div>
+      <datalist id="farmDatalist"></datalist>
+      <div class="field"><label>Notes</label><textarea id="nfNotes"></textarea></div>
+      <div class="hint" id="nfGeomHint"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="nfCancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="nfSaveBtn"><i class="fa-solid fa-check"></i>Save feature</button>
+    </div>
+  </div>
+</div>
+
+<!-- IMPORT MODAL -->
+<div class="modal-scrim" id="importScrim">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Import Data</div><button class="float-close" id="importClose"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div class="field"><label>File</label><input type="file" id="importFile" accept=".json,.geojson,.kml,.kmz,.gpx,.zip,.shp,.csv,application/json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz,application/gpx+xml,application/zip,text/csv">
+      </div>
+      <div id="importPreview"></div>
+      <div class="field"><label>Default reference doctype (used only when a feature has none of its own)</label>
+        <select id="impRefDoctype"><option value="">— None —</option></select>
+      </div>
+      <div class="field"><label>Default farm</label><input type="text" id="impFarm" list="farmDatalist" placeholder="e.g. Kapkolia"></div>
+      <div class="field"><label>Source module tag</label><input type="text" id="impSourceModule" value="Map Viewer Import"></div>
+      <div id="importResult"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="importCancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="importRunBtn" disabled><i class="fa-solid fa-file-import"></i>Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT MODAL -->
+<div class="modal-scrim" id="exportScrim">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Export Data</div><button class="float-close" id="exportClose"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Format</label>
+        <select id="expFormat">
+          <option value="geojson">GeoJSON</option>
+          <option value="kml">KML</option>
+          <option value="gpx">GPX</option>
+          <option value="csv">CSV (points only)</option>
+        </select>
+        <div class="hint" id="expFormatHint"></div>
+      </div>
+      <div class="field">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <label style="margin:0">Layers</label>
+          <span>
+            <button class="btn btn-sm" id="expLayersAllBtn" style="padding:3px 9px">All</button>
+            <button class="btn btn-sm" id="expLayersNoneBtn" style="padding:3px 9px">None</button>
+          </span>
+        </div>
+        <div id="expLayerRows" style="max-height:220px;overflow-y:auto;margin-top:4px"></div>
+      </div>
+      <div id="expResult"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="exportCancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="exportRunBtn"><i class="fa-solid fa-file-export"></i>Export</button>
+    </div>
+  </div>
+</div>
+
+<!-- LAYER PROPERTIES MODAL -->
+<div class="modal-scrim" id="layerPropsScrim">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title" id="layerPropsTitle">Layer Properties</div><button class="float-close" id="layerPropsClose"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body">
+      <div class="field"><label>Color</label><input type="color" id="layerPropsColor" style="width:100%;height:36px;padding:2px;cursor:pointer"></div>
+      <div class="field-row">
+        <div class="field"><label>Color Mode</label><select id="layerPropsColorMode"><option value="Fixed">Fixed</option><option value="By Property">By Property</option></select></div>
+        <div class="field" id="layerPropsColorByField" style="display:none"><label>Color By Property</label><input type="text" id="layerPropsColorBy" placeholder="e.g. area_sq_m"></div>
+      </div>
+      <div id="layerPropsColorByLegend" style="display:none;margin:2px 0 8px">
+        <div style="height:8px;border-radius:4px;background:linear-gradient(90deg, rgb(24,95,165) 0%, rgb(59,109,17) 34%, rgb(133,79,11) 67%, rgb(179,38,30) 100%)"></div>
+        <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-mute);margin-top:2px" id="layerPropsColorByRangeText"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Line width (px)</label><input type="number" id="layerPropsWidth" min="0.5" max="20" step="0.5"></div>
+        <div class="field"><label>Fill opacity</label><input type="range" id="layerPropsFillOpacity" min="0" max="1" step="0.05" style="width:100%;margin-top:8px"></div>
+      </div>
+      <label class="check-row" style="margin-top:6px"><input type="checkbox" id="layerPropsHollow">Hollow (outline only, no fill)</label>
+      <div class="hint" id="layerPropsCount"></div>
+      <div class="hint">Every change previews on the map immediately — nothing is saved until you click Save. Close or Cancel reverts the preview.</div>
+      <div class="divider-line"></div>
+      <div class="section-label">Configuration</div>
+      <div id="layerPropsRows"></div>
+      <div id="layerPropsResult"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="layerPropsCancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="layerPropsSaveBtn"><i class="fa-solid fa-check"></i>Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+const BASE = window.location.origin;
+const API = "upande_spatial.api.spatial.";
+
+// ─────────────────────────────  API wrapper  ─────────────────────────────
+async function callMethod(method, args){
+  const r = await fetch(BASE+"/api/method/"+method, {
+    method:"POST", credentials:"include",
+    headers:{"Content-Type":"application/json","X-Frappe-CSRF-Token": window.csrf_token || (window.frappe && frappe.csrf_token) || ""},
+    body: JSON.stringify(args||{})
+  });
+  let j = {};
+  try{ j = await r.json(); }catch(e){}
+  if(!r.ok){
+    let msg = "HTTP "+r.status;
+    if(j._server_messages){
+      try{
+        const parsed = JSON.parse(j._server_messages);
+        const first = parsed[0];
+        if(first){ try{ const obj = JSON.parse(first); msg = (obj && obj.message) || first; }catch(e){ msg = first; } }
+      }catch(e){}
+    } else if(j.exception){
+      const line = String(j.exception).split("\n").pop();
+      if(line) msg = line;
+    } else if(j.message && typeof j.message === "string"){
+      msg = j.message;
+    }
+    throw new Error(msg);
+  }
+  if(j.exc) throw new Error(j.exc);
+  return j.message;
+}
+function escHtml(s){ if(s==null) return ""; return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function fmtNum(n, d){ if(n==null || isNaN(n)) return "—"; d = d==null?1:d; return Number(n).toLocaleString(undefined,{maximumFractionDigits:d}); }
+function toast(msg, isErr){
+  const t = document.getElementById("ssToast");
+  t.textContent = msg; t.className = "ss-toast show" + (isErr?" err":"");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=>{ t.classList.remove("show"); }, isErr?5000:2800);
+}
+function showLoading(v){ document.getElementById("ssLoading").classList.toggle("show", !!v); }
+
+// ─────────────────────────────  State  ─────────────────────────────
+const state = {
+  map: null,
+  geoLayer: null,          // the currently-rendered L.geoJSON layer group
+  masterFC: {type:"FeatureCollection", features:[]},  // loaded from get_features_geojson (farm-scoped)
+  layerMeta: [],            // from get_layers()
+  layerVisible: {},         // layer_name -> bool
+  showLabels: true,         // persistent on-map text labels (each feature's title), not just click-to-popup
+  liveSymbology: {},        // layer_name -> {color, line_width, fill_opacity} - unsaved Layer Properties edits, previewed on the map immediately
+  farmSet: new Set(),
+  refDoctypes: [],          // from get_referenced_doctypes()
+  featureLayerByName: {},   // spatial feature name -> leaflet layer
+  metaByName: {},           // spatial feature name -> list_features() row (carries source_module, which get_features_geojson doesn't expose)
+  selectedName: null,
+  selectedDetail: null,     // full get_feature() payload for the selected feature
+  drawnItems: null,         // L.FeatureGroup that leaflet-draw draws new shapes into
+  drawHandler: null,
+  drawMode: null,
+  editGroup: null,
+  editHandler: null,
+  editMeta: null,           // {reference_doctype, reference_name, feature_role, farm, title}
+  filters: {title:"", refDoctype:"", geomType:"", layer:"", sourceModule:"", bbox:false},
+  measure: {active:false, points:[], layer:null},
+  importParsed: null
+};
+
+const PALETTE = ["#185FA5","#3B6D11","#854F0B","#534AB7","#228883","#b3261e","#0C447C"];
+function colorForLayer(name){
+  let h = 0; for(let i=0;i<(name||"").length;i++) h = (h*31 + name.charCodeAt(i)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
+// Live Layer Properties edits (unsaved, previewed instantly) win over the
+// persisted per-feature values get_features_geojson stamped on, which in
+// turn win over the hardcoded defaults this app always used before layers
+// had any configurable symbology at all.
+// Shared 4-stop sequential ramp (blue -> green -> amber -> red) - same
+// palette the EPANET plugin's own results legend uses, so "color by
+// property" symbology reads consistently with the rest of the app.
+const SYM_RAMP_STOPS = [
+  {t:0, rgb:[24,95,165]}, {t:0.34, rgb:[59,109,17]}, {t:0.67, rgb:[133,79,11]}, {t:1, rgb:[179,38,30]},
+];
+function symRampColor(t){
+  if(t==null || isNaN(t)) return "#8a8780";
+  t = Math.max(0, Math.min(1, t));
+  let a=SYM_RAMP_STOPS[0], b=SYM_RAMP_STOPS[SYM_RAMP_STOPS.length-1];
+  for(let i=0;i<SYM_RAMP_STOPS.length-1;i++){ if(t>=SYM_RAMP_STOPS[i].t && t<=SYM_RAMP_STOPS[i+1].t){ a=SYM_RAMP_STOPS[i]; b=SYM_RAMP_STOPS[i+1]; break; } }
+  const span=(b.t-a.t)||1, lt=(t-a.t)/span;
+  const r=Math.round(a.rgb[0]+(b.rgb[0]-a.rgb[0])*lt), g=Math.round(a.rgb[1]+(b.rgb[1]-a.rgb[1])*lt), bch=Math.round(a.rgb[2]+(b.rgb[2]-a.rgb[2])*lt);
+  return `rgb(${r},${g},${bch})`;
+}
+function symRampCssGradient(){
+  return `linear-gradient(90deg, ${SYM_RAMP_STOPS.map(s=>`rgb(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]}) ${s.t*100}%`).join(", ")})`;
+}
+// {layer::property -> {min,max}} - cleared whenever masterFC reloads (see
+// loadAll) so a changed farm filter or new data recomputes instead of
+// using a stale range from whatever was loaded before.
+let colorByRanges = {};
+function getColorByRange(layer, prop){
+  const key = layer+"::"+prop;
+  if(colorByRanges[key]) return colorByRanges[key];
+  const vals = state.masterFC.features
+    .filter(f=>(f.properties._layer||"Uncategorized")===layer)
+    .map(f=>parseFloat(f.properties[prop]))
+    .filter(v=>!isNaN(v));
+  const range = vals.length ? {min:Math.min(...vals), max:Math.max(...vals)} : {min:0, max:0};
+  colorByRanges[key] = range;
+  return range;
+}
+function featureColor(f){
+  const layer = (f.properties && f.properties._layer) || "Uncategorized";
+  const live = state.liveSymbology[layer];
+  const mode = live ? live.color_mode : (f.properties && f.properties.color_mode);
+  const prop = live ? live.color_by_property : (f.properties && f.properties.color_by_property);
+  if(mode === "By Property" && prop && f.properties && f.properties[prop] != null){
+    const val = parseFloat(f.properties[prop]);
+    if(!isNaN(val)){
+      const range = getColorByRange(layer, prop);
+      const t = range.max>range.min ? (val-range.min)/(range.max-range.min) : 0.5;
+      return symRampColor(t);
+    }
+  }
+  if(live && live.color) return live.color;
+  return (f.properties && f.properties.color) || colorForLayer(layer);
+}
+function featureWeight(f){
+  const layer = (f.properties && f.properties._layer) || "Uncategorized";
+  const live = state.liveSymbology[layer];
+  if(live && live.line_width) return live.line_width;
+  if(f.properties && f.properties.line_width) return f.properties.line_width;
+  return f.geometry.type.includes("Line") ? 4 : 2.5;
+}
+function featureFillOpacity(f){
+  const layer = (f.properties && f.properties._layer) || "Uncategorized";
+  const live = state.liveSymbology[layer];
+  if(live && live.fill_opacity != null) return live.fill_opacity;
+  if(f.properties && f.properties.fill_opacity != null) return f.properties.fill_opacity;
+  return f.geometry.type.includes("Polygon") ? 0.18 : 0;
+}
+// Spatial Entity Config's color/marker_icon fields are admin-controlled and
+// low risk, but they still flow into style="..." attribute strings and
+// class="..." attribute strings built via innerHTML below - cheap to
+// validate before trusting them there rather than assume they're always
+// well-formed. Falls back to a safe default when the value doesn't look
+// like a hex color / a plain icon-name slug.
+function safeColor(c){ return (typeof c === "string" && /^#[0-9a-fA-F]{3,8}$/.test(c)) ? c : null; }
+function safeIconSlug(s){ return (typeof s === "string" && /^[a-z0-9-]+$/i.test(s)) ? s : null; }
+
+// ─────────────────────────────  Map init  ─────────────────────────────
+function initMap(){
+  state.map = L.map("ssMapEl", {zoomControl:false, attributionControl:true}).setView([-1.29, 36.82], 12);
+  L.control.zoom({position:"bottomright"}).addTo(state.map);
+
+  // Both tile providers send CORS headers - required for Layout/Export's canvas
+  // capture to read the map back out without it coming back tainted. Esri's World
+  // Imagery is free and keyless, same as OSM, so satellite needs no account/API key.
+  state.baseLayers = {
+    street: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom:19, attribution:"&copy; OpenStreetMap contributors", crossOrigin: true,
+    }),
+    satellite: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      maxZoom:19, attribution:"Tiles &copy; Esri", crossOrigin: true,
+    }),
+  };
+  state.activeBasemap = "street";
+  state.baseLayers.street.addTo(state.map);
+
+  document.getElementById("basemapSelect").addEventListener("change", (e)=>{
+    const next = e.target.value;
+    if(next === state.activeBasemap) return;
+    state.map.removeLayer(state.baseLayers[state.activeBasemap]);
+    state.baseLayers[next].addTo(state.map);
+    state.activeBasemap = next;
+    if(!document.getElementById("layoutOverlay").classList.contains("hidden")) refreshLayoutPreview(true);
+  });
+
+  state.drawnItems = new L.FeatureGroup();
+  state.map.addLayer(state.drawnItems);
+
+  state.map.on("mousemove", (e)=>{
+    document.getElementById("geoLL").textContent = e.latlng.lat.toFixed(5)+" , "+e.latlng.lng.toFixed(5);
+  });
+  state.map.on("zoomend", ()=>{
+    document.getElementById("geoZoom").textContent = "Zoom "+state.map.getZoom();
+  });
+  document.getElementById("geoZoom").textContent = "Zoom "+state.map.getZoom();
+
+  state.map.on(L.Draw.Event.CREATED, onDrawCreated);
+  state.map.on("moveend", ()=>{ if(state.filters.bbox) renderMap(); });
+}
+
+// ─────────────────────────────  Data loading  ─────────────────────────────
+async function loadAll(farm){
+  showLoading(true);
+  try{
+    const [layers, refDoctypes, ownerDoctypes, fc, rows] = await Promise.all([
+      callMethod(API+"get_layers", {}),
+      callMethod(API+"get_referenced_doctypes", {}),
+      callMethod(API+"list_owner_doctypes", {}),
+      callMethod(API+"get_features_geojson", farm ? {farm:farm} : {}),
+      callMethod(API+"list_features", farm ? {farm:farm} : {})
+    ]);
+    state.layerMeta = layers || [];
+    state.refDoctypes = refDoctypes || [];
+    state.ownerDoctypes = ownerDoctypes || [];
+    state.masterFC = fc || {type:"FeatureCollection", features:[]};
+    colorByRanges = {};
+
+    // get_features_geojson's properties don't carry source_module - list_features
+    // does, so build a lookup off it purely for that one filter dimension.
+    state.metaByName = {};
+    (rows||[]).forEach(r=>{ state.metaByName[r.name] = r; });
+
+    state.layerMeta.forEach(l=>{ if(!(l.layer_name in state.layerVisible)) state.layerVisible[l.layer_name] = true; });
+    state.farmSet = new Set();
+    state.masterFC.features.forEach(f=>{ if(f.properties && f.properties._farm) state.farmSet.add(f.properties._farm); });
+
+    populateFarmDropdowns();
+    populateRefDoctypeDropdowns();
+    populateLayerDropdownAndRows();
+    populateGeoprocessingDropdowns();
+    populateHeatLayerSelect();
+    populateWeightedOverlayLayers();
+    if(document.getElementById("gpHeatShow").checked) updateHeatmap(); // keep it in sync with reloaded data
+    renderMap();
+    await refreshSummaryBadge();
+  }catch(e){
+    toast("Failed to load spatial data: "+e.message, true);
+  }finally{
+    showLoading(false);
+  }
+}
+
+async function refreshSummaryBadge(){
+  try{
+    const farm = document.getElementById("farmFilter").value || undefined;
+    const summary = await callMethod(API+"get_feature_summary", farm?{farm:farm}:{});
+    const layerCount = (summary.by_layer||[]).length;
+    document.getElementById("ssSummaryBadge").innerHTML =
+      '<i class="fa-solid fa-layer-group"></i>&nbsp;'+layerCount+" layers · "+summary.total+" features";
+  }catch(e){ /* summary badge is decorative - don't block the page on it */ }
+}
+
+function populateFarmDropdowns(){
+  const farms = Array.from(state.farmSet).sort();
+  const sel = document.getElementById("farmFilter");
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All farms</option>' + farms.map(f=>`<option value="${escHtml(f)}">${escHtml(f)}</option>`).join("");
+  sel.value = cur && farms.includes(cur) ? cur : "";
+  document.getElementById("farmDatalist").innerHTML = farms.map(f=>`<option value="${escHtml(f)}">`).join("");
+}
+function populateRefDoctypeDropdowns(){
+  const opts = state.refDoctypes.map(d=>`<option value="${escHtml(d.doctype)}">${escHtml(d.doctype)} (${d.feature_count})</option>`).join("");
+  document.getElementById("qRefDoctype").innerHTML = '<option value="">Any</option>' + opts;
+  document.getElementById("nfRefDoctype").innerHTML = '<option value="">— No reference (standalone) —</option>' +
+    state.ownerDoctypes.map(d=>`<option value="${escHtml(d)}">${escHtml(d)}</option>`).join("");
+  document.getElementById("impRefDoctype").innerHTML = '<option value="">— None —</option>' +
+    state.refDoctypes.map(d=>`<option value="${escHtml(d.doctype)}">${escHtml(d.doctype)}</option>`).join("");
+}
+function populateLayerDropdownAndRows(){
+  document.getElementById("qLayer").innerHTML = '<option value="">Any</option>' +
+    state.layerMeta.map(l=>`<option value="${escHtml(l.layer_name)}">${escHtml(l.layer_name)}</option>`).join("");
+
+  // Source module: free text field on the doctype, no dedicated list API - the
+  // distinct values actually in use come off list_features (state.metaByName).
+  const modules = new Set();
+  Object.values(state.metaByName).forEach(r=>{ if(r.source_module) modules.add(r.source_module); });
+  const sourceSel = document.getElementById("qSourceModule");
+  const curSource = sourceSel.value;
+  sourceSel.innerHTML = '<option value="">Any</option>' + Array.from(modules).sort().map(m=>`<option value="${escHtml(m)}">${escHtml(m)}</option>`).join("");
+  sourceSel.value = curSource && modules.has(curSource) ? curSource : "";
+
+  const counts = {};
+  state.masterFC.features.forEach(f=>{
+    const l = (f.properties && f.properties._layer) || "Uncategorized";
+    counts[l] = (counts[l]||0) + 1;
+  });
+
+  const rows = state.layerMeta.map(l=>{
+    const color = safeColor(l.color) || colorForLayer(l.layer_name);
+    const n = counts[l.layer_name] || 0;
+    const checked = state.layerVisible[l.layer_name] !== false;
+    return `<div class="layer-row">
+      <input type="checkbox" data-layer="${escHtml(l.layer_name)}" ${checked?"checked":""}>
+      <span class="layer-swatch" style="background:${color}"></span>
+      <span class="layer-name" title="${escHtml(l.layer_name)}">${escHtml(l.layer_name)}</span>
+      <span class="layer-count">${n}</span>
+      <button class="attr-table-btn" data-layer="${escHtml(l.layer_name)}" title="Attribute table"><i class="fa-solid fa-table"></i></button>
+      <button class="attr-table-btn" data-layer="${escHtml(l.layer_name)}" data-props="1" title="Layer properties"><i class="fa-solid fa-sliders"></i></button>
+    </div>`;
+  }).join("");
+  document.getElementById("layerRows").innerHTML = rows || '<div class="empty-note">No layers yet.</div>';
+  document.querySelectorAll('#layerRows .attr-table-btn:not([data-props])').forEach(btn=>{
+    btn.addEventListener("click", (e)=>{ e.stopPropagation(); openAttributeTable(btn.dataset.layer); });
+  });
+  document.querySelectorAll('#layerRows .attr-table-btn[data-props]').forEach(btn=>{
+    btn.addEventListener("click", (e)=>{ e.stopPropagation(); openLayerProperties(btn.dataset.layer); });
+  });
+  document.querySelectorAll('#layerRows input[type=checkbox]').forEach(cb=>{
+    cb.addEventListener("change", ()=>{
+      state.layerVisible[cb.dataset.layer] = cb.checked;
+      renderMap();
+      // Layout Designer is a docked panel, not a takeover - if it's open
+      // while you're unchecking layers to prepare a print, reflect that
+      // live instead of making you remember to hit "Refresh map".
+      if(!document.getElementById("layoutOverlay").classList.contains("hidden")) refreshLayoutPreview(true);
+      refreshOpenAttrTabs();
+    });
+  });
+}
+
+// ─────────────────────────────  Rendering  ─────────────────────────────
+function filteredFeatures(){
+  const f = state.filters;
+  let feats = state.masterFC.features.filter(feat=>{
+    const p = feat.properties || {};
+    const layer = p._layer || "Uncategorized";
+    if(state.layerVisible[layer] === false) return false;
+    if(f.title && !String(p._title||"").toLowerCase().includes(f.title.toLowerCase())) return false;
+    if(f.refDoctype && p._reference_doctype !== f.refDoctype) return false;
+    if(f.geomType && feat.geometry && feat.geometry.type !== f.geomType) return false;
+    if(f.layer && layer !== f.layer) return false;
+    if(f.sourceModule){
+      const meta = state.metaByName[p._spatial_feature_name];
+      if(!meta || meta.source_module !== f.sourceModule) return false;
+    }
+    return true;
+  });
+  if(f.bbox && state.map){
+    const b = state.map.getBounds();
+    feats = feats.filter(feat=>{
+      try{
+        const pt = turf.pointOnFeature(feat);
+        const c = pt.geometry.coordinates;
+        return b.contains(L.latLng(c[1], c[0]));
+      }catch(e){ return true; }
+    });
+  }
+  return feats;
+}
+
+function pinIcon(color, iconClass){
+  // color/iconClass ultimately trace back to Spatial Entity Config's
+  // color/marker_icon fields (admin-controlled, but not validated at the
+  // doctype level) - validate before trusting them in this innerHTML-built
+  // style/class attribute string, same reasoning as safeColor/safeIconSlug
+  // above.
+  const safeC = safeColor(color) || "#185FA5";
+  const safeI = safeIconSlug(iconClass) || "fa-map-pin";
+  return L.divIcon({
+    className:"ss-divicon",
+    html:`<div class="ss-pin" style="background:${safeC}"><i class="fa-solid ${safeI}"></i></div>`,
+    iconSize:[22,22], iconAnchor:[11,22], popupAnchor:[0,-20]
+  });
+}
+
+// ───────────────────────── Label style settings ─────────────────────────
+// Live-appliable via CSS custom properties on #spatial-root - changing a
+// setting restyles every already-rendered tooltip instantly with zero
+// re-render, since the browser recomputes var() on the next paint. Style
+// variants (Boxed/Halo/Plain) are separate rules gated by a class instead
+// of trying to cram three different background/shadow strategies into one
+// parametrized rule.
+const DEFAULT_LABEL_SETTINGS = {fontSize:10.5, bold:true, italic:false, color:"#2a2a26", style:"boxed", bgColor:"#ffffff", bgOpacity:0.9, haloColor:"#ffffff"};
+let labelSettings = {...DEFAULT_LABEL_SETTINGS};
+
+function hexToRgba(hex, alpha){
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function applyLabelStyle(s){
+  const root = document.getElementById("spatial-root");
+  root.style.setProperty("--label-font-size", s.fontSize+"px");
+  root.style.setProperty("--label-font-weight", s.bold ? "700" : "400");
+  root.style.setProperty("--label-font-style", s.italic ? "italic" : "normal");
+  root.style.setProperty("--label-color", s.color);
+  root.classList.remove("label-style-halo", "label-style-plain");
+  if(s.style === "halo"){
+    root.classList.add("label-style-halo");
+    const hc = s.haloColor;
+    root.style.setProperty("--label-halo-shadow", `-1px -1px 0 ${hc},1px -1px 0 ${hc},-1px 1px 0 ${hc},1px 1px 0 ${hc},0 0 3px ${hc}`);
+  } else if(s.style === "plain"){
+    root.classList.add("label-style-plain");
+  } else {
+    root.style.setProperty("--label-bg", hexToRgba(s.bgColor, s.bgOpacity));
+  }
+}
+
+function openLabelSettingsModal(){
+  const scrim = document.createElement("div");
+  scrim.className = "modal-scrim show";
+  scrim.innerHTML = `
+    <div class="modal" style="max-width:420px">
+      <div class="modal-head"><div class="modal-title">Label Style</div><button class="float-close" id="labelSettClose"><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="modal-body">
+        <div class="field-row" style="flex-wrap:wrap;row-gap:10px">
+          <div class="field" style="flex:1 1 160px"><label>Font Size (px)</label><input type="number" id="lsFontSize" min="6" max="30" step="0.5" value="${labelSettings.fontSize}"></div>
+          <div class="field" style="flex:1 1 160px"><label>Text Color</label><input type="color" id="lsColor" value="${labelSettings.color}" style="width:100%;height:32px;padding:2px;border:1px solid var(--hairline);border-radius:var(--radius-sm)"></div>
+          <div class="field" style="flex:1 1 160px"><label>Weight</label><select id="lsWeight"><option value="bold" ${labelSettings.bold?"selected":""}>Bold</option><option value="normal" ${!labelSettings.bold?"selected":""}>Normal</option></select></div>
+          <div class="field" style="flex:1 1 160px"><label>Style</label><select id="lsItalic"><option value="normal" ${!labelSettings.italic?"selected":""}>Upright</option><option value="italic" ${labelSettings.italic?"selected":""}>Italic</option></select></div>
+          <div class="field" style="flex:1 1 100%"><label>Label Background</label><select id="lsStyle">
+            <option value="boxed" ${labelSettings.style==="boxed"?"selected":""}>Boxed (solid background)</option>
+            <option value="halo" ${labelSettings.style==="halo"?"selected":""}>Halo (outlined text, no box)</option>
+            <option value="plain" ${labelSettings.style==="plain"?"selected":""}>Plain (text only)</option>
+          </select></div>
+          <div class="field" id="lsBgColorField" style="flex:1 1 160px"><label>Background Color</label><input type="color" id="lsBgColor" value="${labelSettings.bgColor}" style="width:100%;height:32px;padding:2px;border:1px solid var(--hairline);border-radius:var(--radius-sm)"></div>
+          <div class="field" id="lsBgOpacityField" style="flex:1 1 160px"><label>Background Opacity</label><input type="range" id="lsBgOpacity" min="0" max="1" step="0.05" value="${labelSettings.bgOpacity}" style="width:100%"></div>
+          <div class="field" id="lsHaloColorField" style="flex:1 1 160px;display:none"><label>Halo Color</label><input type="color" id="lsHaloColor" value="${labelSettings.haloColor}" style="width:100%;height:32px;padding:2px;border:1px solid var(--hairline);border-radius:var(--radius-sm)"></div>
+        </div>
+        <div class="hint" style="margin-top:8px">Changes apply live to the map - close this panel when you're happy with it.</div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="lsResetBtn">Reset to default</button>
+        <button class="btn btn-primary" id="lsDoneBtn">Done</button>
+      </div>
+    </div>`;
+  document.body.appendChild(scrim);
+
+  function readForm(){
+    labelSettings = {
+      fontSize: parseFloat(document.getElementById("lsFontSize").value) || DEFAULT_LABEL_SETTINGS.fontSize,
+      color: document.getElementById("lsColor").value,
+      bold: document.getElementById("lsWeight").value === "bold",
+      italic: document.getElementById("lsItalic").value === "italic",
+      style: document.getElementById("lsStyle").value,
+      bgColor: document.getElementById("lsBgColor").value,
+      bgOpacity: parseFloat(document.getElementById("lsBgOpacity").value),
+      haloColor: document.getElementById("lsHaloColor").value,
+    };
+    document.getElementById("lsBgColorField").style.display = labelSettings.style==="boxed" ? "" : "none";
+    document.getElementById("lsBgOpacityField").style.display = labelSettings.style==="boxed" ? "" : "none";
+    document.getElementById("lsHaloColorField").style.display = labelSettings.style==="halo" ? "" : "none";
+    applyLabelStyle(labelSettings);
+  }
+  scrim.querySelector(".modal-body").addEventListener("input", readForm);
+  scrim.querySelector(".modal-body").addEventListener("change", readForm);
+  readForm();
+
+  const close = ()=> scrim.remove();
+  scrim.querySelector("#labelSettClose").addEventListener("click", close);
+  scrim.querySelector("#lsDoneBtn").addEventListener("click", close);
+  scrim.querySelector("#lsResetBtn").addEventListener("click", ()=>{
+    labelSettings = {...DEFAULT_LABEL_SETTINGS};
+    document.getElementById("lsFontSize").value = labelSettings.fontSize;
+    document.getElementById("lsColor").value = labelSettings.color;
+    document.getElementById("lsWeight").value = "bold";
+    document.getElementById("lsItalic").value = "normal";
+    document.getElementById("lsStyle").value = "boxed";
+    document.getElementById("lsBgColor").value = labelSettings.bgColor;
+    document.getElementById("lsBgOpacity").value = labelSettings.bgOpacity;
+    document.getElementById("lsHaloColor").value = labelSettings.haloColor;
+    readForm();
+  });
+}
+
+function renderMap(){
+  if(state.geoLayer){ state.map.removeLayer(state.geoLayer); }
+  state.featureLayerByName = {};
+  const feats = filteredFeatures();
+
+  state.geoLayer = L.geoJSON({type:"FeatureCollection", features:feats}, {
+    pointToLayer:(feature, latlng)=>{
+      const color = featureColor(feature);
+      const iconClass = feature.properties.marker_icon ? ("fa-"+feature.properties.marker_icon) : "fa-map-pin";
+      return L.marker(latlng, {icon: pinIcon(color, iconClass)});
+    },
+    style:(feature)=>({
+      color: featureColor(feature), weight: featureWeight(feature),
+      fillColor: featureColor(feature), fillOpacity: featureFillOpacity(feature), opacity: .9
+    }),
+    onEachFeature:(feature, layer)=>{
+      const name = feature.properties._spatial_feature_name;
+      state.featureLayerByName[name] = layer;
+      const title = feature.properties._title || name;
+      layer.bindPopup(`<div class="ss-pop-t">${escHtml(title)}</div><div class="ss-pop-s">${escHtml(feature.properties._layer||"—")} · ${escHtml(feature.geometry.type)}</div>`);
+      layer.on("click", ()=>{ selectFeature(name); });
+      // Persistent on-map labels - this is what actually tells two overlapping
+      // Farm Boundary polygons (same color, same layer) apart at a glance,
+      // instead of needing to click each one to see its popup.
+      if(state.showLabels && feature.properties._title){
+        const isPoint = feature.geometry.type==="Point" || feature.geometry.type==="MultiPoint";
+        layer.bindTooltip(feature.properties._title, {
+          permanent: true, className: "feature-label",
+          direction: isPoint ? "right" : "center",
+          offset: isPoint ? [10,0] : [0,0],
+        });
+      }
+    }
+  }).addTo(state.map);
+
+  document.getElementById("qResultCount").textContent = "("+feats.length+")";
+  renderQueryResults(feats);
+}
+
+function renderQueryResults(feats){
+  const box = document.getElementById("qResults");
+  const anyFilter = state.filters.title || state.filters.refDoctype || state.filters.geomType || state.filters.layer || state.filters.sourceModule || state.filters.bbox;
+  if(!anyFilter){
+    box.innerHTML = '<div class="empty-note">Set a filter or search above to list matching features.</div>';
+    return;
+  }
+  if(!feats.length){ box.innerHTML = '<div class="empty-note">No features match.</div>'; return; }
+  box.innerHTML = feats.map(f=>{
+    const name = f.properties._spatial_feature_name;
+    const sel = name === state.selectedName ? " sel" : "";
+    return `<div class="result-row${sel}" data-name="${escHtml(name)}">
+      <div class="result-title">${escHtml(f.properties._title || name)}</div>
+      <div class="result-meta"><span class="badge b-blue">${escHtml(f.properties._layer||"—")}</span>${escHtml(f.geometry.type)}</div>
+    </div>`;
+  }).join("");
+  box.querySelectorAll(".result-row").forEach(row=>{
+    row.addEventListener("click", ()=>{
+      const name = row.dataset.name;
+      const layer = state.featureLayerByName[name];
+      if(layer){
+        if(layer.getBounds) state.map.fitBounds(layer.getBounds(), {maxZoom:17});
+        else if(layer.getLatLng) state.map.setView(layer.getLatLng(), 17);
+      }
+      selectFeature(name);
+    });
+  });
+}
+
+// ─────────────────────────────  Feature detail / edit / delete  ─────────────────────────────
+async function selectFeature(name){
+  state.selectedName = name;
+  openPanel("panelDetail");
+  document.getElementById("detailBody").innerHTML = '<div class="empty-note">Loading…</div>';
+  try{
+    const d = await callMethod(API+"get_feature", {name:name});
+    state.selectedDetail = d;
+    renderDetail(d);
+    updateProcessHints(d);
+    Object.values(state.featureLayerByName).forEach(l=>{ if(l.setIcon) return; });
+  }catch(e){
+    document.getElementById("detailBody").innerHTML = '<div class="empty-note">Could not load feature: '+escHtml(e.message)+'</div>';
+  }
+}
+
+function renderDetail(d){
+  const refLink = (d.reference_doctype && d.reference_name)
+    ? (d.reference_doctype === "Asset"
+        ? `<span title="Linked to an Asset record — identity withheld here">${escHtml(d.reference_doctype)}</span>`
+        : `<a href="/app/${encodeURIComponent(d.reference_doctype.toLowerCase().replace(/ /g,"-"))}/${encodeURIComponent(d.reference_name)}" target="_blank">${escHtml(d.reference_doctype)} · ${escHtml(d.reference_name)}</a>`)
+    : "—";
+  const sizeRow = d.geometry_type && d.geometry_type.includes("Polygon")
+    ? `<div class="kv-row"><span class="kv-l">Area</span><span class="kv-v">${fmtNum(d.area_sq_m,1)} m²</span></div>`
+    : (d.geometry_type && d.geometry_type.includes("Line")
+      ? `<div class="kv-row"><span class="kv-l">Length</span><span class="kv-v">${fmtNum(d.length_m,1)} m</span></div>`
+      : "");
+  let propsHtml = '<div class="hint">None</div>';
+  if(d.properties && Object.keys(d.properties).length){
+    propsHtml = '<table class="props-table">' + Object.entries(d.properties).map(([k,v])=>
+      `<tr><td>${escHtml(k)}</td><td>${escHtml(typeof v === "object" ? JSON.stringify(v) : v)}</td></tr>`).join("") + '</table>';
+  }
+  document.getElementById("detailBody").innerHTML = `
+    <div class="kv-row"><span class="kv-l">Title</span><span class="kv-v">${escHtml(d.title || d.name)}</span></div>
+    <div class="kv-row"><span class="kv-l">Layer</span><span class="kv-v"><span class="badge b-blue">${escHtml(d.name && state.masterFC ? (findLayerFor(d.name)||"—") : "—")}</span></span></div>
+    <div class="kv-row"><span class="kv-l">Geometry</span><span class="kv-v">${escHtml(d.geometry_type||"—")}</span></div>
+    ${sizeRow}
+    <div class="kv-row"><span class="kv-l">Farm</span><span class="kv-v">${escHtml(d.farm||"—")}</span></div>
+    <div class="kv-row"><span class="kv-l">Reference</span><span class="kv-v">${refLink}</span></div>
+    <div class="kv-row"><span class="kv-l">Role</span><span class="kv-v">${escHtml(d.feature_role||"—")}</span></div>
+    <div class="kv-row"><span class="kv-l">Source</span><span class="kv-v">${escHtml(d.source_module||"—")}</span></div>
+
+    <div class="section-label">Properties</div>
+    ${propsHtml}
+
+    <div class="section-label">Notes</div>
+    <div class="hint">${escHtml(d.notes || "None")}</div>
+
+    <div class="detail-actions">
+      <button class="btn btn-sm" id="detailEditBtn"><i class="fa-solid fa-pen"></i>Edit geometry</button>
+      <button class="btn btn-sm btn-danger" id="detailDeleteBtn"><i class="fa-solid fa-trash"></i>Delete</button>
+    </div>
+
+    <div class="section-label"><i class="fa-solid fa-users"></i>&nbsp;Shared with</div>
+    <div id="shareRows"><div class="hint">Loading…</div></div>
+    <div class="field-row" style="margin-top:8px">
+      <div class="field" style="flex:2"><input type="text" id="shareUserInput" placeholder="user@email.com"></div>
+      <div class="field" style="flex:0 0 auto"><label class="check-row" style="padding:7px 0 0"><input type="checkbox" id="shareWriteCk">Write</label></div>
+    </div>
+    <button class="btn btn-sm btn-primary" id="shareAddBtn" style="width:100%;justify-content:center"><i class="fa-solid fa-share-nodes"></i>Share</button>
+  `;
+  document.getElementById("detailEditBtn").addEventListener("click", ()=>startEditFeature(d));
+  document.getElementById("detailDeleteBtn").addEventListener("click", ()=>deleteSelectedFeature(d));
+  document.getElementById("shareAddBtn").addEventListener("click", ()=>addShare(d.name));
+  loadShares(d.name);
+}
+
+function findLayerFor(name){
+  const f = state.masterFC.features.find(x=>x.properties && x.properties._spatial_feature_name === name);
+  return f ? f.properties._layer : null;
+}
+
+async function loadShares(name){
+  const box = document.getElementById("shareRows");
+  try{
+    const users = await callMethod(API+"get_feature_shares", {name:name});
+    if(!users || !users.length){ box.innerHTML = '<div class="hint">Not shared with anyone yet.</div>'; return; }
+    box.innerHTML = users.map(u=>`
+      <div class="share-row">
+        <span class="su" title="${escHtml(u.user)}">${escHtml(u.user)}</span>
+        <span class="badge ${u.write?"b-green":"b-blue"}">${u.write?"Write":"Read"}</span>
+        <button class="sx" data-user="${escHtml(u.user)}" title="Remove"><i class="fa-solid fa-xmark"></i></button>
+      </div>`).join("");
+    box.querySelectorAll(".sx").forEach(btn=>{
+      btn.addEventListener("click", async ()=>{
+        try{ await callMethod(API+"unshare_feature", {name:name, user:btn.dataset.user}); loadShares(name); toast("Unshared."); }
+        catch(e){ toast("Failed to unshare: "+e.message, true); }
+      });
+    });
+  }catch(e){
+    box.innerHTML = '<div class="hint">Could not load shares.</div>';
+  }
+}
+async function addShare(name){
+  const input = document.getElementById("shareUserInput");
+  const user = input.value.trim();
+  if(!user){ toast("Enter a user email first.", true); return; }
+  try{
+    await callMethod(API+"share_feature", {name:name, user:user, read:1, write: document.getElementById("shareWriteCk").checked ? 1 : 0});
+    input.value = "";
+    loadShares(name);
+    toast("Shared with "+user+".");
+  }catch(e){
+    toast("Failed to share: "+e.message, true);
+  }
+}
+
+async function deleteSelectedFeature(d){
+  if(!confirm('Delete "'+(d.title||d.name)+'"? This cannot be undone.')) return;
+  try{
+    await callMethod(API+"delete_feature", {name:d.name});
+    toast("Feature deleted.");
+    closePanel("panelDetail");
+    state.selectedName = null; state.selectedDetail = null;
+    updateProcessHints(null);
+    await loadAll(document.getElementById("farmFilter").value || undefined);
+  }catch(e){
+    toast("Delete failed: "+e.message, true);
+  }
+}
+
+// ─────────────────────────────  Geometry edit  ─────────────────────────────
+function startEditFeature(d){
+  const layer = state.featureLayerByName[d.name];
+  if(!layer){ toast("That feature isn't currently drawn on the map (hidden layer or filtered out).", true); return; }
+  state.editMeta = {reference_doctype:d.reference_doctype, reference_name:d.reference_name, feature_role:d.feature_role, farm:d.farm, title:d.title, name:d.name};
+  state.editGroup = new L.FeatureGroup();
+  state.editGroup.addLayer(layer);
+  state.map.addLayer(state.editGroup);
+  state.editHandler = new L.EditToolbar.Edit(state.map, {featureGroup: state.editGroup});
+  state.editHandler.enable();
+  document.getElementById("editBar").classList.add("show");
+}
+function stopEditFeature(discard){
+  // L.EditToolbar.Edit.disable() reverts any uncommitted drag/reshape back
+  // to the original geometry when .save() hasn't been called first - so
+  // this alone is already enough to discard in-progress edits on cancel.
+  if(state.editHandler){ state.editHandler.disable(); }
+  if(state.editGroup){ state.map.removeLayer(state.editGroup); }
+  document.getElementById("editBar").classList.remove("show");
+  state.editHandler = null; state.editGroup = null;
+  if(discard){
+    // Cancel path: nothing changed server-side, so a full loadAll() isn't
+    // needed - but editGroup held the SAME layer object state.geoLayer
+    // still tracks as one of its own children (not a copy). Removing
+    // editGroup from the map just above also detaches that shared layer
+    // from the map's DOM/registry, even though state.geoLayer's own
+    // bookkeeping still thinks it's present - leaving the feature visually
+    // gone until something else happens to trigger a re-render. A local
+    // renderMap() (cheap - just rebuilds from the already-loaded masterFC,
+    // no network round-trip) puts it back correctly. The Save path below
+    // doesn't need this: it calls loadAll() itself right after, which is a
+    // superset of what renderMap() alone would do here.
+    renderMap();
+  }
+}
+async function saveEditFeature(){
+  if(!state.editGroup || !state.editMeta) return;
+  const layers = state.editGroup.getLayers();
+  if(!layers.length) return;
+  const geojson = layers[0].toGeoJSON();
+  const meta = state.editMeta;
+  try{
+    await callMethod(API+"upsert_feature", {
+      geometry: JSON.stringify(geojson.geometry),
+      name: meta.name,
+      reference_doctype: meta.reference_doctype, reference_name: meta.reference_name,
+      feature_role: meta.feature_role, farm: meta.farm, title: meta.title
+    });
+    toast("Geometry updated.");
+    stopEditFeature(false);
+    await loadAll(document.getElementById("farmFilter").value || undefined);
+    selectFeature(meta.name);
+  }catch(e){
+    toast("Save failed: "+e.message, true);
+  }
+}
+
+// ─────────────────────────────  Draw new feature  ─────────────────────────────
+let pendingDrawLayer = null, pendingDrawGeomType = null;
+function setDrawMode(mode){
+  if(state.drawHandler){ state.drawHandler.disable(); state.drawHandler = null; }
+  document.querySelectorAll(".draw-opt").forEach(o=>o.classList.remove("active"));
+  if(!mode){ state.drawMode = null; return; }
+  const opts = {shapeOptions:{color:"#185FA5", weight:3}};
+  let Handler;
+  if(mode === "marker") Handler = L.Draw.Marker;
+  else if(mode === "polyline") Handler = L.Draw.Polyline;
+  else if(mode === "polygon") Handler = L.Draw.Polygon;
+  else if(mode === "rectangle") Handler = L.Draw.Rectangle;
+  if(!Handler) return;
+  state.drawHandler = new Handler(state.map, mode==="marker" ? undefined : opts);
+  state.drawHandler.enable();
+  state.drawMode = mode;
+  const el = document.querySelector('.draw-opt[data-mode="'+mode+'"]');
+  if(el) el.classList.add("active");
+}
+function onDrawCreated(e){
+  pendingDrawLayer = e.layer;
+  pendingDrawGeomType = e.layerType;
+  state.drawnItems.addLayer(pendingDrawLayer);
+  setDrawMode(null);
+  closePanel("panelDraw");
+  openNewFeatureModal();
+}
+function openNewFeatureModal(){
+  document.getElementById("nfTitle").value = "";
+  document.getElementById("nfRefDoctype").value = "";
+  resetNfRefName();
+  document.getElementById("nfRole").value = "";
+  document.getElementById("nfFarm").value = "";
+  document.getElementById("nfNotes").value = "";
+  document.getElementById("nfGeomHint").textContent = "Geometry type: " + (pendingDrawGeomType || "unknown") + " (drawn on map)";
+  document.getElementById("newFeatureScrim").classList.add("show");
+}
+function closeNewFeatureModal(discardLayer){
+  document.getElementById("newFeatureScrim").classList.remove("show");
+  if(discardLayer && pendingDrawLayer){ state.drawnItems.removeLayer(pendingDrawLayer); }
+  pendingDrawLayer = null; pendingDrawGeomType = null;
+}
+async function saveNewFeature(){
+  if(!pendingDrawLayer){ toast("No drawn geometry to save.", true); return; }
+  const geojson = pendingDrawLayer.toGeoJSON();
+  const refDoctype = document.getElementById("nfRefDoctype").value || null;
+  const refName = document.getElementById("nfRefName").value.trim() || null;
+  try{
+    await callMethod(API+"upsert_feature", {
+      geometry: JSON.stringify(geojson.geometry),
+      reference_doctype: refDoctype,
+      reference_name: refDoctype ? refName : null,
+      feature_role: document.getElementById("nfRole").value.trim() || null,
+      farm: document.getElementById("nfFarm").value.trim() || null,
+      title: document.getElementById("nfTitle").value.trim() || null,
+      source_module: "Map Viewer",
+      notes: document.getElementById("nfNotes").value.trim() || null
+    });
+    toast("Feature saved.");
+    state.drawnItems.removeLayer(pendingDrawLayer);
+    closeNewFeatureModal(false);
+    await loadAll(document.getElementById("farmFilter").value || undefined);
+  }catch(e){
+    toast("Save failed: "+e.message, true);
+  }
+}
+
+function resetNfRefName(){
+  const sel = document.getElementById("nfRefName");
+  sel.innerHTML = '<option value="">— pick a reference doctype first —</option>';
+  sel.disabled = true;
+}
+async function refreshNfRefNameOptions(){
+  const doctype = document.getElementById("nfRefDoctype").value;
+  const sel = document.getElementById("nfRefName");
+  if(!doctype){ resetNfRefName(); return; }
+  sel.innerHTML = '<option value="">Loading…</option>';
+  sel.disabled = true;
+  try{
+    const candidates = await callMethod(API+"list_owner_candidates", {doctype});
+    sel.innerHTML = '<option value="">— none —</option>' +
+      candidates.map(c=>`<option value="${escHtml(c.name)}">${escHtml(c.title)}</option>`).join("");
+    sel.disabled = false;
+  }catch(e){
+    sel.innerHTML = '<option value="">Could not load records</option>';
+  }
+}
+
+// ─────────────────────────────  Export  ─────────────────────────────
+// ─────────────────────────────  Export  ─────────────────────────────
+// A deliberate dialog rather than an instant one-click download - which
+// layers and which format shouldn't depend on whatever the sidebar/Query
+// tab happen to be set to at the moment (easy to forget a leftover title
+// filter from earlier and silently under-export). Uses state.masterFC
+// directly (every loaded feature) rather than filteredFeatures(), since
+// layer choice here is now explicit, not inherited from ambient UI state.
+const EXPORT_FORMAT_HINTS = {
+  geojson: "Every geometry type, all properties preserved.",
+  kml: "Every geometry type. Properties are flattened into each placemark's description.",
+  gpx: "Points become waypoints, lines become tracks. Polygons aren't representable in GPX and are skipped.",
+  csv: "Points only (as lat/lon columns + properties). Lines and polygons are skipped.",
+};
+
+function openExportModal(){
+  const rows = document.getElementById("expLayerRows");
+  rows.innerHTML = state.layerMeta.map(l=>{
+    const color = safeColor(l.color) || colorForLayer(l.layer_name);
+    const checked = state.layerVisible[l.layer_name] !== false; // pre-checked to match what's currently visible on the map
+    return `<label class="check-row">
+      <input type="checkbox" class="exp-layer-cb" value="${escHtml(l.layer_name)}" ${checked?"checked":""}>
+      <span class="layer-swatch" style="background:${color}"></span>${escHtml(l.layer_name)}
+    </label>`;
+  }).join("") || '<div class="empty-note">No layers to export.</div>';
+  document.getElementById("expResult").innerHTML = "";
+  updateExportFormatHint();
+  document.getElementById("exportScrim").classList.add("show");
+}
+function closeExportModal(){ document.getElementById("exportScrim").classList.remove("show"); }
+function updateExportFormatHint(){
+  document.getElementById("expFormatHint").textContent = EXPORT_FORMAT_HINTS[document.getElementById("expFormat").value] || "";
+}
+function downloadBlob(content, mime, filename){
+  const blob = new Blob([content], {type: mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function csvFromFeatures(feats){
+  const points = feats.filter(f=>f.geometry && f.geometry.type==="Point");
+  const propKeys = new Set();
+  points.forEach(f=>Object.keys(f.properties||{}).forEach(k=>{ if(!k.startsWith("_")) propKeys.add(k); }));
+  const headers = ["title","lat","lon", ...Array.from(propKeys)];
+  const escCsv = v => {
+    const s = v==null ? "" : String(v);
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  };
+  const lines = [headers.map(escCsv).join(",")];
+  points.forEach(f=>{
+    const p = f.properties||{};
+    const row = [p._title||p._spatial_feature_name||"", f.geometry.coordinates[1], f.geometry.coordinates[0], ...Array.from(propKeys).map(k=>p[k])];
+    lines.push(row.map(escCsv).join(","));
+  });
+  return {text: lines.join("\n"), skipped: feats.length - points.length};
+}
+async function runExport(){
+  const btn = document.getElementById("exportRunBtn");
+  const resultEl = document.getElementById("expResult");
+  const checkedLayers = new Set(Array.from(document.querySelectorAll(".exp-layer-cb:checked")).map(cb=>cb.value));
+  if(!checkedLayers.size){ resultEl.innerHTML = '<div class="import-fail">Pick at least one layer.</div>'; return; }
+
+  const feats = state.masterFC.features.filter(f=>checkedLayers.has(f.properties._layer||"Uncategorized"));
+  if(!feats.length){ resultEl.innerHTML = '<div class="import-fail">No features in the selected layer(s).</div>'; return; }
+
+  btn.disabled = true;
+  try{
+    const format = document.getElementById("expFormat").value;
+    const filename = "map-viewer-export-"+todayISO();
+    const fc = {type:"FeatureCollection", features: feats};
+
+    if(format === "geojson"){
+      downloadBlob(JSON.stringify(fc, null, 2), "application/geo+json", filename+".geojson");
+      resultEl.innerHTML = `<div class="import-summary">Exported <b>${feats.length}</b> feature(s).</div>`;
+    } else if(format === "kml"){
+      downloadBlob(tokml(fc), "application/vnd.google-earth.kml+xml", filename+".kml");
+      resultEl.innerHTML = `<div class="import-summary">Exported <b>${feats.length}</b> feature(s).</div>`;
+    } else if(format === "gpx"){
+      const supported = feats.filter(f=>f.geometry && (f.geometry.type==="Point" || f.geometry.type==="LineString" || f.geometry.type==="MultiLineString"));
+      downloadBlob(togpx({type:"FeatureCollection", features: supported}), "application/gpx+xml", filename+".gpx");
+      const skipped = feats.length - supported.length;
+      resultEl.innerHTML = `<div class="import-summary">Exported <b>${supported.length}</b> feature(s)${skipped?`, <b>${skipped}</b> polygon(s) skipped (not representable in GPX)`:""}.</div>`;
+    } else if(format === "csv"){
+      const {text, skipped} = csvFromFeatures(feats);
+      downloadBlob(text, "text/csv", filename+".csv");
+      resultEl.innerHTML = `<div class="import-summary">Exported <b>${feats.length-skipped}</b> point(s)${skipped?`, <b>${skipped}</b> non-point feature(s) skipped`:""}.</div>`;
+    }
+    toast("Export complete.");
+  }catch(e){
+    resultEl.innerHTML = '<div class="import-fail">Export failed: '+escHtml(e.message)+'</div>';
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+// ─────────────────────────────  Attribute Table  ─────────────────────────────
+// Every feature in a layer, no filter required first (unlike the Query tab's
+// results list, which is deliberately empty until a filter is set) - the
+// standard GIS "right-click a layer -> Open Attribute Table" workflow.
+// Opens as its own closable tab next to Map/Layout (ArcGIS Pro's own
+// pattern) rather than a modal - one tab per layer, re-used on repeat opens.
+function openAttributeTable(layerName){
+  const viewId = "attr:"+layerName;
+  const isNew = !document.querySelector(`.canvas-view[data-view="${viewId}"]`);
+  findOrCreateViewTab(viewId, layerName, "fa-table", true);
+  if(isNew){
+    const overlay = document.createElement("div");
+    overlay.className = "canvas-view hidden";
+    overlay.dataset.view = viewId;
+    overlay.dataset.layer = layerName;
+    overlay.innerHTML = `
+      <div class="layout-toolbar">
+        <input type="text" class="attr-tab-search" placeholder="Search title or farm…" style="flex:0 1 280px">
+        <span class="hint attr-tab-count" style="margin-left:auto"></span>
+      </div>
+      <div style="overflow:auto;flex:1">
+        <table class="attr-table">
+          <thead><tr><th>Title</th><th>Geometry</th><th>Farm</th><th>Role</th><th>Area / Length</th><th>Source</th></tr></thead>
+          <tbody class="attr-tab-body"></tbody>
+        </table>
+      </div>`;
+    document.querySelector(".ss-canvas").appendChild(overlay);
+    overlay.querySelector(".attr-tab-search").addEventListener("input", (e)=>renderAttrTabRows(overlay, e.target.value));
+  }
+  renderAttrTabRows(document.querySelector(`.canvas-view[data-view="${viewId}"]`), "");
+  switchView(viewId);
+}
+function renderAttrTabRows(overlay, query){
+  const layerName = overlay.dataset.layer;
+  const q = (query||"").toLowerCase();
+  const feats = state.masterFC.features.filter(f=>{
+    if((f.properties._layer||"Uncategorized") !== layerName) return false;
+    if(!q) return true;
+    const p = f.properties||{};
+    return String(p._title||"").toLowerCase().includes(q) || String(p._farm||"").toLowerCase().includes(q);
+  });
+  const body = overlay.querySelector(".attr-tab-body");
+  body.innerHTML = feats.map(f=>{
+    const p = f.properties||{};
+    const meta = state.metaByName[p._spatial_feature_name] || {};
+    const sizeVal = f.geometry.type.includes("Polygon") ? (meta.area_sq_m!=null?fmtNum(meta.area_sq_m,0)+" m²":"—")
+      : f.geometry.type.includes("Line") ? (meta.length_m!=null?fmtNum(meta.length_m,0)+" m":"—") : "—";
+    return `<tr data-name="${escHtml(p._spatial_feature_name)}">
+      <td>${escHtml(p._title||p._spatial_feature_name)}</td>
+      <td>${escHtml(f.geometry.type)}</td>
+      <td>${escHtml(p._farm||"—")}</td>
+      <td>${escHtml(meta.feature_role||"—")}</td>
+      <td>${sizeVal}</td>
+      <td>${escHtml(meta.source_module||"—")}</td>
+    </tr>`;
+  }).join("");
+  overlay.querySelector(".attr-tab-count").textContent = feats.length+" feature(s)";
+  body.querySelectorAll("tr").forEach(row=>{
+    row.addEventListener("click", ()=>{
+      const name = row.dataset.name;
+      switchView("map");
+      selectFeature(name);
+      const layer = state.featureLayerByName[name];
+      if(layer){
+        if(layer.getBounds) state.map.fitBounds(layer.getBounds(), {maxZoom:17});
+        else if(layer.getLatLng) state.map.setView(layer.getLatLng(), Math.max(state.map.getZoom(),15));
+      }
+    });
+  });
+}
+// Any Attribute Table tab currently open (not just the active one) should
+// stay in sync with the map's data - cheap enough to just re-render all of
+// them whenever the feature set changes, rather than tracking staleness.
+function refreshOpenAttrTabs(){
+  document.querySelectorAll(".canvas-view[data-layer]").forEach(overlay=>{
+    renderAttrTabRows(overlay, overlay.querySelector(".attr-tab-search").value);
+  });
+}
+
+// ─────────────────────────────  Layer Properties  ─────────────────────────────
+// Edits the Spatial Entity Config governance behind a layer (color today;
+// name/geometry rules stay Desk-only for now, shown here read-only) rather
+// than requiring a trip to Desk for something this map-centric.
+let layerPropsCurrent = null;
+async function openLayerProperties(layerName){
+  document.getElementById("layerPropsTitle").textContent = "Layer Properties — "+layerName;
+  document.getElementById("layerPropsResult").innerHTML = "";
+  document.getElementById("layerPropsRows").innerHTML = '<div class="empty-note">Loading…</div>';
+  document.getElementById("layerPropsScrim").classList.add("show");
+  try{
+    const data = await callMethod(API+"get_layer_properties", {layer_name: layerName});
+    layerPropsCurrent = data;
+    const row = data.rows[0] || {};
+    document.getElementById("layerPropsColor").value = safeColor(row.color) || colorForLayer(layerName);
+    document.getElementById("layerPropsColorMode").value = row.color_mode === "By Property" ? "By Property" : "Fixed";
+    document.getElementById("layerPropsColorBy").value = row.color_by_property || "";
+    document.getElementById("layerPropsWidth").value = row.line_width || 3;
+    const initialFillOpacity = row.fill_opacity != null ? row.fill_opacity : 0.18;
+    document.getElementById("layerPropsFillOpacity").value = initialFillOpacity;
+    document.getElementById("layerPropsHollow").checked = initialFillOpacity === 0;
+    document.getElementById("layerPropsCount").textContent = data.feature_count+" feature(s) currently in this layer.";
+    updateLayerPropsFormVisibility();
+    document.getElementById("layerPropsRows").innerHTML = data.rows.length
+      ? data.rows.map(r=>`<div class="kv-row"><span class="kv-l">${escHtml(r.reference_doctype)}</span><span class="kv-v">${escHtml(r.feature_role||"(any role)")} · ${escHtml(r.geometry_type)}</span></div>`).join("")
+      : '<div class="empty-note">No Spatial Entity Config row uses this layer name yet — likely an ad-hoc layer from a standalone feature.</div>';
+  }catch(e){
+    document.getElementById("layerPropsRows").innerHTML = '<div class="import-fail">Could not load: '+escHtml(e.message)+'</div>';
+  }
+}
+// Fires on every input change (dragging the opacity slider, typing a color,
+// nudging the width) - updates the map immediately, before Save is ever
+// clicked, matching how a real GIS symbology dialog previews live.
+function updateLayerPropsFormVisibility(){
+  const mode = document.getElementById("layerPropsColorMode").value;
+  const isByProp = mode === "By Property";
+  document.getElementById("layerPropsColorByField").style.display = isByProp ? "" : "none";
+  const hollow = document.getElementById("layerPropsHollow").checked;
+  document.getElementById("layerPropsFillOpacity").disabled = hollow;
+
+  const legend = document.getElementById("layerPropsColorByLegend");
+  const prop = document.getElementById("layerPropsColorBy").value.trim();
+  if(isByProp && prop && layerPropsCurrent){
+    const range = getColorByRange(layerPropsCurrent.layer_name, prop);
+    document.getElementById("layerPropsColorByRangeText").textContent = range.min+" — "+range.max;
+    legend.style.display = "";
+  } else {
+    legend.style.display = "none";
+  }
+}
+function previewLayerProperties(){
+  if(!layerPropsCurrent) return;
+  updateLayerPropsFormVisibility();
+  const hollow = document.getElementById("layerPropsHollow").checked;
+  colorByRanges = {}; // a changed property/mode invalidates any cached range
+  state.liveSymbology[layerPropsCurrent.layer_name] = {
+    color: document.getElementById("layerPropsColor").value,
+    color_mode: document.getElementById("layerPropsColorMode").value,
+    color_by_property: document.getElementById("layerPropsColorBy").value.trim(),
+    line_width: parseFloat(document.getElementById("layerPropsWidth").value) || null,
+    fill_opacity: hollow ? 0 : parseFloat(document.getElementById("layerPropsFillOpacity").value),
+  };
+  renderMap();
+}
+function closeLayerProperties(){
+  // Closing/cancelling without saving reverts the live preview - only Save
+  // makes it stick.
+  if(layerPropsCurrent) delete state.liveSymbology[layerPropsCurrent.layer_name];
+  renderMap();
+  document.getElementById("layerPropsScrim").classList.remove("show");
+}
+async function saveLayerProperties(){
+  if(!layerPropsCurrent) return;
+  const btn = document.getElementById("layerPropsSaveBtn");
+  const resultEl = document.getElementById("layerPropsResult");
+  btn.disabled = true;
+  try{
+    const colorMode = document.getElementById("layerPropsColorMode").value;
+    const hollow = document.getElementById("layerPropsHollow").checked;
+    await callMethod(API+"update_layer_properties", {
+      layer_name: layerPropsCurrent.layer_name,
+      color: document.getElementById("layerPropsColor").value,
+      color_mode: colorMode,
+      color_by_property: colorMode === "By Property" ? document.getElementById("layerPropsColorBy").value.trim() : "",
+      line_width: parseFloat(document.getElementById("layerPropsWidth").value) || 0,
+      fill_opacity: hollow ? 0 : parseFloat(document.getElementById("layerPropsFillOpacity").value),
+    });
+    delete state.liveSymbology[layerPropsCurrent.layer_name]; // now persisted - loadAll() below fetches the real value, no need to keep previewing it separately
+    toast("Layer properties saved.");
+    document.getElementById("layerPropsScrim").classList.remove("show");
+    await loadAll(document.getElementById("farmFilter").value || undefined); // re-pulls color/width/opacity from the now-updated config
+  }catch(e){
+    resultEl.innerHTML = '<div class="import-fail">Save failed: '+escHtml(e.message)+'</div>';
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+// ─────────────────────────────  Import  ─────────────────────────────
+function openImportModal(){
+  state.importParsed = null;
+  document.getElementById("importFile").value = "";
+  document.getElementById("importPreview").innerHTML = "";
+  document.getElementById("importResult").innerHTML = "";
+  document.getElementById("importRunBtn").disabled = true;
+  document.getElementById("importScrim").classList.add("show");
+}
+function closeImportModal(){ document.getElementById("importScrim").classList.remove("show"); }
+
+// ─────────────────────────────  Import → Layout handoff  ─────────────────────────────
+let importHighlightLayer = null;
+function highlightImportedFeatures(feats){
+  if(importHighlightLayer){ state.map.removeLayer(importHighlightLayer); importHighlightLayer = null; }
+  if(!feats.length) return;
+  importHighlightLayer = L.geoJSON({type:"FeatureCollection", features: feats}, {
+    style: {color:"#185FA5", weight:3, dashArray:"6,4", fillOpacity:.08},
+    pointToLayer: (f, latlng)=>L.circleMarker(latlng, {radius:9, color:"#185FA5", weight:3, fillOpacity:.15}),
+  }).addTo(state.map);
+  // Auto-clears - this is a "just imported" callout, not a permanent style,
+  // and leaving it forever would be confusing once the moment's passed.
+  setTimeout(()=>{ if(importHighlightLayer){ state.map.removeLayer(importHighlightLayer); importHighlightLayer = null; } }, 20000);
+}
+function prepareLayoutFromImport(){
+  const feats = state.masterFC.features.filter(f=>lastImportedNames.includes(f.properties._spatial_feature_name));
+  if(!feats.length){
+    toast("Imported features aren't visible on the map right now — check the layer/farm filters aren't hiding them.", true);
+    return;
+  }
+  closeImportModal();
+  const bounds = L.geoJSON({type:"FeatureCollection", features: feats}).getBounds();
+  // animate:false - switchView("layout") captures the map immediately after
+  // this; an animated fitBounds would still be mid-pan when that capture
+  // runs, showing the wrong (transitional) view.
+  if(bounds.isValid()) state.map.fitBounds(bounds, {padding:[40,40], maxZoom:17, animate:false});
+  highlightImportedFeatures(feats);
+  switchView("layout");
+}
+async function handleImportFile(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const preview = document.getElementById("importPreview");
+  const runBtn = document.getElementById("importRunBtn");
+  state.importParsed = null;
+  runBtn.disabled = true;
+  preview.innerHTML = '<div class="empty-note">Reading file…</div>';
+  try{
+    const fc = await parseImportFile(file);
+    const feats = fc.features || [];
+    if(!feats.length) throw new Error("No features found in file.");
+    const types = {};
+    feats.forEach(f=>{ const t = f.geometry && f.geometry.type; if(t) types[t] = (types[t]||0)+1; });
+    state.importParsed = fc;
+    preview.innerHTML = `<div class="import-summary">
+      <b>${feats.length}</b> feature(s) found · ${Object.entries(types).map(([t,n])=>`${escHtml(t)}: ${n}`).join(", ") || "no geometry types found"}
+    </div>`;
+    runBtn.disabled = false;
+  }catch(err){
+    preview.innerHTML = '<div class="import-fail">Could not parse file: '+escHtml(err.message)+'</div>';
+    runBtn.disabled = true;
+    state.importParsed = null;
+  }
+}
+
+// Every branch below normalizes to a plain {type:"FeatureCollection", features:[...]}
+// so runImport() and the backend's import_features() need no format awareness at all.
+async function parseImportFile(file){
+  const name = file.name.toLowerCase();
+  const ext = name.includes(".") ? name.slice(name.lastIndexOf(".")+1) : "";
+
+  if(ext === "json" || ext === "geojson"){
+    return normalizeGeoJSON(JSON.parse(await file.text()));
+  }
+  if(ext === "kml"){
+    return toGeoJSON.kml(parseXml(await file.text()));
+  }
+  if(ext === "gpx"){
+    return toGeoJSON.gpx(parseXml(await file.text()));
+  }
+  if(ext === "kmz"){
+    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+    const entry = Object.values(zip.files).find(f=>!f.dir && f.name.toLowerCase().endsWith(".kml"));
+    if(!entry) throw new Error("No .kml file found inside the .kmz archive.");
+    return toGeoJSON.kml(parseXml(await entry.async("text")));
+  }
+  if(ext === "zip"){
+    // shpjs reads the .shp/.dbf/.prj set from the zip and reprojects to
+    // WGS84 automatically when a .prj is present - this is why a zipped
+    // shapefile is recommended over a lone .shp (no attributes/projection).
+    const result = await shp(await file.arrayBuffer());
+    const collections = Array.isArray(result) ? result : [result];
+    return {type:"FeatureCollection", features: collections.flatMap(c=>c.features || [])};
+  }
+  if(ext === "shp"){
+    // Geometry only - no .dbf means no attributes, no .prj means no
+    // reprojection (coordinates are assumed to already be WGS84 lat/lon).
+    const geometries = shp.parseShp(await file.arrayBuffer());
+    return {type:"FeatureCollection", features: geometries.map(geometry=>({type:"Feature", geometry, properties:{}}))};
+  }
+  if(ext === "csv"){
+    return csvToGeoJSON(await file.text());
+  }
+  throw new Error("Unsupported file type: ."+(ext||"unknown")+". Supported: .geojson, .json, .kml, .kmz, .gpx, .zip (shapefile), .csv");
+}
+
+function normalizeGeoJSON(parsed){
+  let feats;
+  if(parsed.type === "FeatureCollection") feats = parsed.features || [];
+  else if(parsed.type === "Feature") feats = [parsed];
+  else if(Array.isArray(parsed)) feats = parsed;
+  else throw new Error("Not a recognizable GeoJSON Feature/FeatureCollection/list.");
+  return {type:"FeatureCollection", features: feats};
+}
+
+function parseXml(text){
+  const xml = new DOMParser().parseFromString(text, "text/xml");
+  if(xml.querySelector("parsererror")) throw new Error("Could not parse XML file.");
+  return xml;
+}
+
+function csvToGeoJSON(text){
+  const lines = text.split(/\r\n|\n|\r/).filter(l=>l.trim().length);
+  if(lines.length < 2) throw new Error("CSV needs a header row and at least one data row.");
+  const headers = splitCsvLine(lines[0]).map(h=>h.trim());
+  const lower = headers.map(h=>h.toLowerCase());
+  const latIdx = lower.findIndex(h=>["lat","latitude","y"].includes(h));
+  const lonIdx = lower.findIndex(h=>["lon","lng","long","longitude","x"].includes(h));
+  if(latIdx === -1 || lonIdx === -1) throw new Error("CSV must have latitude/longitude columns (lat/lon, latitude/longitude, or x/y).");
+  const features = [];
+  for(let i=1;i<lines.length;i++){
+    const cells = splitCsvLine(lines[i]);
+    if(!cells.length) continue;
+    const lat = parseFloat(cells[latIdx]);
+    const lon = parseFloat(cells[lonIdx]);
+    if(!isFinite(lat) || !isFinite(lon)) continue;
+    const properties = {};
+    headers.forEach((h,idx)=>{ if(idx!==latIdx && idx!==lonIdx) properties[h] = cells[idx]; });
+    features.push({type:"Feature", geometry:{type:"Point", coordinates:[lon, lat]}, properties});
+  }
+  if(!features.length) throw new Error("No valid rows with numeric lat/lon found.");
+  return {type:"FeatureCollection", features};
+}
+
+function splitCsvLine(line){
+  // Minimal CSV split that still honors quoted fields containing commas.
+  const out = [];
+  let cur = "", inQuotes = false;
+  for(let i=0;i<line.length;i++){
+    const c = line[i];
+    if(inQuotes){
+      if(c === '"'){ if(line[i+1] === '"'){ cur+='"'; i++; } else inQuotes = false; }
+      else cur += c;
+    } else if(c === '"') inQuotes = true;
+    else if(c === ","){ out.push(cur); cur=""; }
+    else cur += c;
+  }
+  out.push(cur);
+  return out;
+}
+let lastImportedNames = [];
+async function runImport(){
+  if(!state.importParsed) return;
+  const btn = document.getElementById("importRunBtn");
+  btn.disabled = true;
+  try{
+    const result = await callMethod(API+"import_features", {
+      features: JSON.stringify(state.importParsed),
+      default_reference_doctype: document.getElementById("impRefDoctype").value || null,
+      default_farm: document.getElementById("impFarm").value.trim() || null,
+      source_module: document.getElementById("impSourceModule").value.trim() || null
+    });
+    lastImportedNames = result.imported_names || [];
+    let html = `<div class="import-summary"><b>${result.imported}</b> imported`;
+    if(result.failed && result.failed.length){
+      html += `, <span style="color:#b3261e"><b>${result.failed.length}</b> failed</span></div>`;
+      html += result.failed.map(f=>`<div class="import-fail">Feature #${f.index}: ${escHtml(f.error)}</div>`).join("");
+    } else {
+      html += "</div>";
+    }
+    if(lastImportedNames.length){
+      html += `<button class="btn btn-sm btn-primary" id="prepareLayoutBtn" style="width:100%;justify-content:center;margin-top:8px"><i class="fa-solid fa-print"></i>Prepare Layout with this data</button>`;
+    }
+    document.getElementById("importResult").innerHTML = html;
+    toast(result.imported+" feature(s) imported"+(result.failed.length?(", "+result.failed.length+" failed — see details"):"."), !!result.failed.length);
+    await loadAll(document.getElementById("farmFilter").value || undefined);
+    if(lastImportedNames.length){
+      document.getElementById("prepareLayoutBtn").addEventListener("click", prepareLayoutFromImport);
+    }
+  }catch(e){
+    document.getElementById("importResult").innerHTML = '<div class="import-fail">Import failed: '+escHtml(e.message)+'</div>';
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+// ─────────────────────────────  Processing tools  ─────────────────────────────
+function firstFeature(fc){
+  if(!fc) return null;
+  if(fc.type === "FeatureCollection") return (fc.features||[])[0] || null;
+  if(fc.type === "Feature") return fc;
+  return {type:"Feature", properties:{}, geometry:fc};
+}
+function updateProcessHints(d){
+  const buf = document.getElementById("bufSourceHint"), bufPrev = document.getElementById("bufPreviewBtn"), bufSave = document.getElementById("bufSaveBtn");
+  const cent = document.getElementById("centSourceHint"), centBtn = document.getElementById("centComputeBtn"), centSave = document.getElementById("centSaveBtn");
+  const al = document.getElementById("alReadout");
+  if(!d){
+    buf.textContent = "Click a feature on the map to use it as the buffer source."; bufPrev.disabled = true; bufSave.disabled = true;
+    cent.textContent = "Select a Polygon/MultiPolygon feature to compute its centroid."; centBtn.disabled = true; centSave.disabled = true;
+    al.textContent = "No feature selected.";
+    return;
+  }
+  buf.textContent = "Source: "+(d.title||d.name); bufPrev.disabled = false; bufSave.disabled = true;
+  const isPoly = d.geometry_type && d.geometry_type.includes("Polygon");
+  cent.textContent = isPoly ? ("Source: "+(d.title||d.name)) : "Selected feature isn't a Polygon/MultiPolygon.";
+  centBtn.disabled = !isPoly; centSave.disabled = true;
+  document.getElementById("centReadout").style.display = "none";
+  const sizeLine = isPoly ? (fmtNum(d.area_sq_m,1)+" m²") : (d.geometry_type && d.geometry_type.includes("Line") ? fmtNum(d.length_m,1)+" m" : "n/a (point geometry)");
+  al.textContent = (d.title||d.name)+" — "+(d.geometry_type||"—")+" — "+sizeLine;
+}
+
+let bufferPreviewLayer = null, bufferPreviewGeom = null;
+function bufferPreview(){
+  const d = state.selectedDetail;
+  if(!d || !d.geometry) return;
+  const dist = parseFloat(document.getElementById("bufDistance").value) || 0;
+  if(dist <= 0){ toast("Enter a buffer distance greater than 0.", true); return; }
+  try{
+    const feat = firstFeature(d.geometry);
+    const buffered = turf.buffer(feat, dist/1000, {units:"kilometers"});
+    if(bufferPreviewLayer) state.map.removeLayer(bufferPreviewLayer);
+    bufferPreviewLayer = L.geoJSON(buffered, {style:{color:"#b3261e", weight:2, dashArray:"6,4", fillOpacity:.08}}).addTo(state.map);
+    bufferPreviewGeom = buffered.geometry;
+    document.getElementById("bufSaveBtn").disabled = false;
+    toast("Buffer preview drawn.");
+  }catch(e){
+    toast("Buffer failed: "+e.message, true);
+  }
+}
+async function bufferSave(){
+  const d = state.selectedDetail;
+  if(!bufferPreviewGeom || !d) return;
+  try{
+    await callMethod(API+"upsert_feature", {
+      geometry: JSON.stringify(bufferPreviewGeom),
+      title: (d.title||d.name)+" (buffer)",
+      farm: d.farm,
+      source_module: "Map Viewer",
+      properties: {derived_from: d.name, buffer_distance_m: parseFloat(document.getElementById("bufDistance").value)||0}
+    });
+    toast("Buffer saved as new feature.");
+    if(bufferPreviewLayer){ state.map.removeLayer(bufferPreviewLayer); bufferPreviewLayer = null; }
+    document.getElementById("bufSaveBtn").disabled = true;
+    await loadAll(document.getElementById("farmFilter").value || undefined);
+  }catch(e){
+    toast("Save failed: "+e.message, true);
+  }
+}
+
+function measureToggle(){
+  state.measure.active = !state.measure.active;
+  document.getElementById("measStartBtn").textContent = state.measure.active ? "Stop" : "Start";
+  document.getElementById("measStartBtn").classList.toggle("active", state.measure.active);
+  state.map.getContainer().style.cursor = state.measure.active ? "crosshair" : "";
+}
+function measureClear(){
+  state.measure.points = [];
+  if(state.measure.layer){ state.map.removeLayer(state.measure.layer); state.measure.layer = null; }
+  document.getElementById("measReadout").textContent = "0 points · 0 m";
+}
+function onMapClickForMeasure(e){
+  if(!state.measure.active) return;
+  state.measure.points.push(e.latlng);
+  if(state.measure.layer) state.map.removeLayer(state.measure.layer);
+  state.measure.layer = L.polyline(state.measure.points, {color:"#3B6D11", weight:3, dashArray:"4,4"}).addTo(state.map);
+  let totalM = 0;
+  for(let i=1;i<state.measure.points.length;i++){
+    totalM += state.measure.points[i-1].distanceTo(state.measure.points[i]);
+  }
+  document.getElementById("measReadout").textContent = state.measure.points.length+" points · "+fmtNum(totalM,1)+" m";
+}
+
+let centroidLayer = null, centroidGeom = null;
+function centroidCompute(){
+  const d = state.selectedDetail;
+  if(!d || !d.geometry) return;
+  try{
+    const feat = firstFeature(d.geometry);
+    const c = turf.centroid(feat);
+    if(centroidLayer) state.map.removeLayer(centroidLayer);
+    centroidLayer = L.circleMarker([c.geometry.coordinates[1], c.geometry.coordinates[0]], {radius:7, color:"#534AB7", fillColor:"#534AB7", fillOpacity:.9}).addTo(state.map);
+    centroidGeom = c.geometry;
+    const r = document.getElementById("centReadout");
+    r.style.display = "block";
+    r.textContent = c.geometry.coordinates[1].toFixed(6)+" , "+c.geometry.coordinates[0].toFixed(6);
+    document.getElementById("centSaveBtn").disabled = false;
+  }catch(e){
+    toast("Centroid failed: "+e.message, true);
+  }
+}
+async function centroidSave(){
+  const d = state.selectedDetail;
+  if(!centroidGeom || !d) return;
+  try{
+    await callMethod(API+"upsert_feature", {
+      geometry: JSON.stringify(centroidGeom),
+      title: (d.title||d.name)+" (centroid)",
+      farm: d.farm,
+      source_module: "Map Viewer",
+      properties: {derived_from: d.name}
+    });
+    toast("Centroid saved as new feature.");
+    document.getElementById("centSaveBtn").disabled = true;
+    await loadAll(document.getElementById("farmFilter").value || undefined);
+  }catch(e){
+    toast("Save failed: "+e.message, true);
+  }
+}
+
+// ─────────────────────────────  Panel plumbing  ─────────────────────────────
+function openPanel(id){
+  document.querySelectorAll(".float").forEach(p=>{ if(p.id !== id && p.id !== "panelDetail") p.classList.add("hidden"); });
+  document.getElementById(id).classList.remove("hidden");
+}
+function closePanel(id){ document.getElementById(id).classList.add("hidden"); }
+function togglePanel(id){
+  const el = document.getElementById(id);
+  if(el.classList.contains("hidden")) openPanel(id); else closePanel(id);
+}
+
+// ─────────────────────────────  Layout / Export (PNG / JPG / PDF)  ─────────────────────────────
+// Rasterizes the live map (tiles + vector overlays) via leaflet-image, then
+// draws title/legend/scale-bar/north-arrow straight onto that canvas with
+// plain Canvas 2D calls - no separate "print composer" DOM to keep in sync
+// with the real map, what you see on screen is what gets captured.
+function drawNorthArrow(ctx, x, y, size){
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = "#0a0a0a";
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(0, -size);
+  ctx.lineTo(size*0.35, size*0.5);
+  ctx.lineTo(0, size*0.2);
+  ctx.lineTo(-size*0.35, size*0.5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#0a0a0a";
+  ctx.font = "bold 13px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("N", 0, -size-6);
+  ctx.restore();
+}
+function niceScaleDistance(maxMeters){
+  // Same "round down to 1/2/5 x 10^n" convention Leaflet's own L.control.scale uses.
+  const pow10 = Math.pow(10, Math.floor(Math.log10(maxMeters)));
+  let nice = pow10;
+  [1,2,5,10].forEach(m=>{ if(m*pow10 <= maxMeters) nice = m*pow10; });
+  return nice;
+}
+function drawScaleBar(ctx, map, x, y, maxBarPx){
+  const p1 = map.containerPointToLatLng([0, map.getSize().y]);
+  const p2 = map.containerPointToLatLng([maxBarPx, map.getSize().y]);
+  const maxMeters = map.distance(p1, p2);
+  if(!maxMeters || !isFinite(maxMeters)) return;
+  const dist = niceScaleDistance(maxMeters);
+  const label = dist >= 1000 ? fmtNum(dist/1000,1)+" km" : fmtNum(dist,0)+" m";
+  const barPx = maxBarPx * (dist / maxMeters);
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.strokeStyle = "#0a0a0a";
+  ctx.fillStyle = "#0a0a0a";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, 0); ctx.lineTo(barPx, 0);
+  ctx.moveTo(0, -5); ctx.lineTo(0, 5);
+  ctx.moveTo(barPx, -5); ctx.lineTo(barPx, 5);
+  ctx.stroke();
+  ctx.font = "12px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(label, barPx/2, -8);
+  ctx.restore();
+}
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r);
+  ctx.arcTo(x, y, x+w, y, r);
+  ctx.closePath();
+}
+function drawLegend(ctx, x, y, boxW){
+  const visible = state.layerMeta.filter(l => state.layerVisible[l.layer_name] !== false);
+  if(!visible.length) return;
+  const rowH = 18, pad = 10, headH = 22;
+  const boxH = pad*2 + headH + rowH*visible.length;
+  ctx.save();
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.strokeStyle = "rgba(10,10,10,0.15)";
+  ctx.lineWidth = 1;
+  roundRect(ctx, x, y, boxW, boxH, 8);
+  ctx.fill(); ctx.stroke();
+
+  ctx.fillStyle = "#0a0a0a";
+  ctx.font = "bold 12px sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("Legend", x+pad, y+pad+10);
+
+  visible.forEach((l, i)=>{
+    const ry = y + pad + headH + i*rowH;
+    ctx.fillStyle = safeColor(l.color) || "#8a8780";
+    ctx.fillRect(x+pad, ry, 12, 12);
+    ctx.strokeStyle = "rgba(10,10,10,0.2)";
+    ctx.strokeRect(x+pad, ry, 12, 12);
+    ctx.fillStyle = "#2a2a26";
+    ctx.font = "11.5px sans-serif";
+    const label = l.layer_name.length > 22 ? l.layer_name.slice(0,21)+"…" : l.layer_name;
+    ctx.fillText(label, x+pad+18, ry+10.5);
+  });
+  ctx.restore();
+}
+
+// ─────────────────────────────  Layout Designer  ─────────────────────────────
+// A real print-composer page (paper size, grid, neatline), not just an
+// export button - opens as a full takeover of this same view (no page
+// navigation), the way QGIS/ArcGIS treat a Print Layout as its own window
+// rather than a settings popover.
+const PAPER_SIZES_MM = {A4:[210,297], A3:[297,420], Letter:[215.9,279.4], Legal:[215.9,355.6]};
+const LAYOUT_DPI = 150;
+let layoutMapCanvas = null; // cached raw map capture - grid/neatline/legend redraw cheaply against it without re-capturing on every toggle
+
+function layoutPaperPixelSize(){
+  const name = document.getElementById("layoutPaperSize").value;
+  const orientation = document.getElementById("layoutOrientation").value;
+  let [wmm, hmm] = PAPER_SIZES_MM[name];
+  if(orientation==="landscape" && hmm>wmm) [wmm,hmm] = [hmm,wmm];
+  if(orientation==="portrait" && wmm>hmm) [wmm,hmm] = [hmm,wmm];
+  const pxPerMm = LAYOUT_DPI/25.4;
+  return {w: Math.round(wmm*pxPerMm), h: Math.round(hmm*pxPerMm)};
+}
+function captureMapCanvas(){
+  return new Promise((resolve, reject)=>{
+    leafletImage(state.map, (err, canvas)=> err ? reject(err instanceof Error?err:new Error(String(err))) : resolve(canvas));
+  });
+}
+function niceGridInterval(spanDeg){
+  const target = spanDeg/5; // aim for roughly 5 grid lines across the extent
+  const pow10 = Math.pow(10, Math.floor(Math.log10(target)));
+  let nice = pow10;
+  [1,2,5,10].forEach(m=>{ if(m*pow10 <= target) nice = m*pow10; });
+  return nice || pow10;
+}
+function drawLayoutGrid(ctx, map, rect){
+  // rect: {x,y,w,h} - where the map image sits on the output page. Grid
+  // lines are computed as a FRACTION of the live map's own container size
+  // (via latLngToContainerPoint / map.getSize()) then scaled into rect, so
+  // this stays aligned regardless of the raw capture's pixel resolution.
+  const size = map.getSize();
+  const bounds = map.getBounds();
+  const south = bounds.getSouth(), north = bounds.getNorth(), west = bounds.getWest(), east = bounds.getEast();
+  const latStep = niceGridInterval(north-south), lonStep = niceGridInterval(east-west);
+  const toXY = (lat, lon)=>{
+    const pt = map.latLngToContainerPoint([lat, lon]);
+    return {x: rect.x + (pt.x/size.x)*rect.w, y: rect.y + (pt.y/size.y)*rect.h};
+  };
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
+  ctx.strokeStyle = "rgba(10,10,10,0.4)";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3,3]);
+  ctx.font = "10px sans-serif";
+  ctx.fillStyle = "#0a0a0a";
+
+  for(let lon=Math.ceil(west/lonStep)*lonStep; lon<=east; lon+=lonStep){
+    const top = toXY(north, lon);
+    ctx.beginPath(); ctx.moveTo(top.x, rect.y); ctx.lineTo(top.x, rect.y+rect.h); ctx.stroke();
+  }
+  for(let lat=Math.ceil(south/latStep)*latStep; lat<=north; lat+=latStep){
+    const left = toXY(lat, west);
+    ctx.beginPath(); ctx.moveTo(rect.x, left.y); ctx.lineTo(rect.x+rect.w, left.y); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  // Labels drawn outside the clip so they aren't cut off at the map edge
+  ctx.save();
+  ctx.fillStyle = "#0a0a0a";
+  ctx.font = "10px sans-serif";
+  for(let lon=Math.ceil(west/lonStep)*lonStep; lon<=east; lon+=lonStep){
+    const top = toXY(north, lon);
+    ctx.textAlign = "center";
+    ctx.fillText(lon.toFixed(3)+"°", top.x, rect.y-4);
+  }
+  for(let lat=Math.ceil(south/latStep)*latStep; lat<=north; lat+=latStep){
+    const left = toXY(lat, west);
+    ctx.textAlign = "right";
+    ctx.fillText(lat.toFixed(3)+"°", rect.x-4, left.y+3);
+  }
+  ctx.restore();
+}
+function drawNeatline(ctx, x, y, w, h){
+  ctx.save();
+  ctx.strokeStyle = "#0a0a0a";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, w, h);
+  ctx.lineWidth = 0.75;
+  ctx.strokeRect(x+5, y+5, w-10, h-10);
+  ctx.restore();
+}
+const LAYOUT_LEGEND_POS = {
+  br:(pw,ph,bw,bh)=>({x:pw-bw-24, y:ph-bh-24}),
+  bl:(pw,ph,bw,bh)=>({x:24, y:ph-bh-24}),
+  tr:(pw,ph,bw,bh)=>({x:pw-bw-24, y:24}),
+  tl:(pw,ph,bw,bh)=>({x:24, y:24}),
+};
+
+async function renderLayoutCanvas(){
+  const {w: pageW, h: pageH} = layoutPaperPixelSize();
+  const canvas = document.getElementById("layoutCanvas");
+  canvas.width = pageW; canvas.height = pageH;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, pageW, pageH);
+
+  const margin = 36;
+  const title = document.getElementById("layoutTitle").value.trim();
+  const titleBand = title ? 46 : 0;
+  const mapRect = {x: margin, y: margin+titleBand, w: pageW-margin*2, h: pageH-margin*2-titleBand-24};
+
+  if(!layoutMapCanvas){
+    document.getElementById("layoutStatus").textContent = "Capturing map…";
+    layoutMapCanvas = await captureMapCanvas();
+  }
+  ctx.drawImage(layoutMapCanvas, mapRect.x, mapRect.y, mapRect.w, mapRect.h);
+
+  if(title){
+    ctx.fillStyle = "#0a0a0a";
+    ctx.font = "bold 22px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(title, margin, margin+30);
+  }
+  if(document.getElementById("layoutGrid").checked) drawLayoutGrid(ctx, state.map, mapRect);
+  if(document.getElementById("layoutNeatline").checked) drawNeatline(ctx, mapRect.x, mapRect.y, mapRect.w, mapRect.h);
+  if(document.getElementById("layoutNorth").checked) drawNorthArrow(ctx, mapRect.x+mapRect.w-40, mapRect.y+50, 16);
+  if(document.getElementById("layoutScale").checked) drawScaleBar(ctx, state.map, mapRect.x+20, mapRect.y+mapRect.h-16, 120);
+  if(document.getElementById("layoutLegend").checked){
+    const visible = state.layerMeta.filter(l => state.layerVisible[l.layer_name] !== false);
+    const bw = 170, bh = 10*2+22+18*visible.length;
+    const pos = LAYOUT_LEGEND_POS[document.getElementById("layoutLegendPos").value](pageW, pageH, bw, bh);
+    const x = Math.max(mapRect.x, Math.min(pos.x, mapRect.x+mapRect.w-bw));
+    const y = Math.max(mapRect.y, Math.min(pos.y, mapRect.y+mapRect.h-bh));
+    drawLegend(ctx, x, y, bw);
+  }
+
+  ctx.fillStyle = "#8a8780";
+  ctx.font = "9px sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("Map Viewer — Upande Spatial · "+todayISO(), margin, pageH-14);
+
+  document.getElementById("layoutStatus").textContent = "";
+}
+async function refreshLayoutPreview(recapture){
+  if(recapture) layoutMapCanvas = null;
+  try{ await renderLayoutCanvas(); }
+  catch(e){ document.getElementById("layoutStatus").textContent = "Preview failed: "+e.message; }
+}
+function switchView(view){
+  document.querySelectorAll(".view-tab").forEach(t=>t.classList.toggle("active", t.dataset.view===view));
+  document.querySelectorAll(".canvas-view").forEach(el=>el.classList.toggle("hidden", el.dataset.view!==view));
+  if(view === "layout") refreshLayoutPreview(true); // always start from a fresh capture - the live map may have moved since the last visit to this tab
+}
+// Finds an existing tab by view id, or creates one and appends it to the
+// strip. `closable` gets it an "x" (Map/Layout are permanent; per-layer
+// Attribute Table tabs aren't).
+function findOrCreateViewTab(viewId, label, icon, closable){
+  let tab = document.querySelector(`.view-tab[data-view="${viewId}"]`);
+  if(tab) return tab;
+  tab = document.createElement("div");
+  tab.className = "view-tab";
+  tab.dataset.view = viewId;
+  tab.innerHTML = `<i class="fa-solid ${icon}"></i><span>${escHtml(label)}</span>`
+    + (closable ? `<button class="view-tab-close"><i class="fa-solid fa-xmark"></i></button>` : "");
+  tab.addEventListener("click", (e)=>{ if(!e.target.closest(".view-tab-close")) switchView(viewId); });
+  if(closable){
+    tab.querySelector(".view-tab-close").addEventListener("click", (e)=>{ e.stopPropagation(); closeViewTab(viewId); });
+  }
+  document.querySelector(".view-tabs").appendChild(tab);
+  return tab;
+}
+function closeViewTab(viewId){
+  const wasActive = document.querySelector(`.view-tab[data-view="${viewId}"]`)?.classList.contains("active");
+  document.querySelector(`.view-tab[data-view="${viewId}"]`)?.remove();
+  document.querySelector(`.canvas-view[data-view="${viewId}"]`)?.remove();
+  if(wasActive) switchView("map");
+}
+async function exportLayout(){
+  const btn = document.getElementById("layoutExportBtn");
+  btn.disabled = true;
+  try{
+    await renderLayoutCanvas();
+    const canvas = document.getElementById("layoutCanvas");
+    const format = document.getElementById("layoutFormat").value;
+    const filename = "map-viewer-layout-"+todayISO();
+    if(format === "pdf"){
+      const { jsPDF } = window.jspdf;
+      const orientation = document.getElementById("layoutOrientation").value;
+      const doc = new jsPDF({orientation, unit:"mm", format: document.getElementById("layoutPaperSize").value.toLowerCase()});
+      const pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
+      doc.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, pageW, pageH);
+      doc.save(filename+".pdf");
+    } else {
+      const mime = format==="jpg" ? "image/jpeg" : "image/png";
+      await new Promise(resolve=>{
+        canvas.toBlob(blob=>{
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url; a.download = filename+"."+format;
+          document.body.appendChild(a); a.click(); a.remove();
+          URL.revokeObjectURL(url);
+          resolve();
+        }, mime, 0.92);
+      });
+    }
+    toast("Layout exported as "+format.toUpperCase()+".");
+  }catch(e){
+    toast("Export failed: "+e.message, true);
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+// ─────────────────────────────  Geoprocessing (Clip / Union / Merge / Spatial Join)  ─────────────────────────────
+// All four work off state.masterFC.features - already-loaded plain GeoJSON
+// Features - rather than a server round trip, same reasoning turf-based
+// Buffer/Centroid above already use. Clip/Union/Merge save their result the
+// same way Buffer/Centroid do: a standalone upsert_feature call (no
+// reference_doctype/reference_name given - always creates new, no risk of
+// the upsert-by-role collision add_element exists to avoid for EPANET).
+function findFeatureByName(name){
+  return (state.masterFC.features||[]).find(f=>f.properties && f.properties._spatial_feature_name===name);
+}
+function populateGeoprocessingDropdowns(){
+  const feats = state.masterFC.features || [];
+  const optsFor = (pred)=> feats.filter(pred).map(f=>{
+    const name = f.properties._spatial_feature_name;
+    const label = (f.properties._title||name)+" ("+f.geometry.type+")";
+    return `<option value="${escHtml(name)}">${escHtml(label)}</option>`;
+  }).join("");
+  const anyOpts = optsFor(()=>true);
+  const polyOpts = optsFor(f=>f.geometry.type==="Polygon"||f.geometry.type==="MultiPolygon");
+
+  ["gpClipA","gpMergeA","gpMergeB","gpJoinSource"].forEach(id=>{ document.getElementById(id).innerHTML = anyOpts; });
+  ["gpClipB","gpUnionA","gpUnionB"].forEach(id=>{ document.getElementById(id).innerHTML = polyOpts; });
+  document.getElementById("gpJoinLayer").innerHTML = state.layerMeta.map(l=>`<option value="${escHtml(l.layer_name)}">${escHtml(l.layer_name)}</option>`).join("");
+}
+
+let gpPreviewLayer = null, gpPreviewGeom = null;
+function gpShowPreview(geometry, color){
+  if(gpPreviewLayer) state.map.removeLayer(gpPreviewLayer);
+  gpPreviewLayer = L.geoJSON(geometry, {
+    style:{color, weight:2, dashArray:"6,4", fillOpacity:.12},
+    pointToLayer:(f,latlng)=>L.circleMarker(latlng, {radius:7, color}),
+  }).addTo(state.map);
+  gpPreviewGeom = geometry;
+}
+async function gpSaveAsFeature(title, sourceNames, btnId){
+  if(!gpPreviewGeom) return;
+  try{
+    await callMethod(API+"upsert_feature", {
+      geometry: JSON.stringify(gpPreviewGeom),
+      title,
+      source_module: "Map Viewer",
+      properties: {derived_from: sourceNames},
+    });
+    toast(title+" saved as new feature.");
+    document.getElementById(btnId).disabled = true;
+    await loadAll(document.getElementById("farmFilter").value || undefined);
+  }catch(e){ toast("Save failed: "+e.message, true); }
+}
+
+let gpClipSources = [];
+function gpClipPreview(){
+  const a = findFeatureByName(document.getElementById("gpClipA").value);
+  const b = findFeatureByName(document.getElementById("gpClipB").value);
+  document.getElementById("gpClipSaveBtn").disabled = true;
+  if(!a || !b) return toast("Pick both Feature A and Feature B.", true);
+  try{
+    let result;
+    if(a.geometry.type==="Polygon" || a.geometry.type==="MultiPolygon"){
+      result = turf.intersect(a, b);
+      if(!result) throw new Error("A and B don't overlap.");
+    } else if(a.geometry.type==="Point"){
+      if(!turf.booleanPointInPolygon(a, b)) throw new Error("That point doesn't fall inside B.");
+      result = a;
+    } else if(a.geometry.type==="MultiPoint"){
+      const kept = a.geometry.coordinates.filter(c=>turf.booleanPointInPolygon(turf.point(c), b));
+      if(!kept.length) throw new Error("No points of A fall inside B.");
+      result = kept.length===1 ? turf.point(kept[0]) : turf.multiPoint(kept);
+    } else {
+      result = turf.bboxClip(a, turf.bbox(b));
+    }
+    gpShowPreview(result.geometry, "#b3261e");
+    gpClipSources = [a.properties._spatial_feature_name, b.properties._spatial_feature_name];
+    document.getElementById("gpClipSaveBtn").disabled = false;
+  }catch(e){ toast("Clip failed: "+e.message, true); }
+}
+
+let gpUnionSources = [];
+function gpUnionPreview(){
+  const a = findFeatureByName(document.getElementById("gpUnionA").value);
+  const b = findFeatureByName(document.getElementById("gpUnionB").value);
+  document.getElementById("gpUnionSaveBtn").disabled = true;
+  if(!a || !b) return toast("Pick both Feature A and Feature B.", true);
+  try{
+    const result = turf.union(a, b);
+    if(!result) throw new Error("Union produced no result.");
+    gpShowPreview(result.geometry, "#185FA5");
+    gpUnionSources = [a.properties._spatial_feature_name, b.properties._spatial_feature_name];
+    document.getElementById("gpUnionSaveBtn").disabled = false;
+  }catch(e){ toast("Union failed: "+e.message, true); }
+}
+
+let gpMergeSources = [];
+function gpMergePreview(){
+  const a = findFeatureByName(document.getElementById("gpMergeA").value);
+  const b = findFeatureByName(document.getElementById("gpMergeB").value);
+  document.getElementById("gpMergeSaveBtn").disabled = true;
+  if(!a || !b) return toast("Pick both Feature A and Feature B.", true);
+  const family = t => t.replace("Multi","");
+  if(family(a.geometry.type) !== family(b.geometry.type)){
+    return toast("Merge needs two features of the same geometry family (both points, both lines, or both polygons).", true);
+  }
+  try{
+    const combined = turf.combine(turf.featureCollection([a, b]));
+    const result = combined.features[0];
+    gpShowPreview(result.geometry, "#3B6D11");
+    gpMergeSources = [a.properties._spatial_feature_name, b.properties._spatial_feature_name];
+    document.getElementById("gpMergeSaveBtn").disabled = false;
+  }catch(e){ toast("Merge failed: "+e.message, true); }
+}
+
+function gpRunJoin(){
+  const source = findFeatureByName(document.getElementById("gpJoinSource").value);
+  const layer = document.getElementById("gpJoinLayer").value;
+  const predicate = document.getElementById("gpJoinPredicate").value;
+  const resultEl = document.getElementById("gpJoinResult");
+  if(!source || !layer) return toast("Pick a source feature and a target layer.", true);
+  const targets = (state.masterFC.features||[]).filter(f=>
+    (f.properties._layer||"Uncategorized")===layer && f.properties._spatial_feature_name !== source.properties._spatial_feature_name
+  );
+  const matches = targets.filter(t=>{
+    try{
+      if(predicate==="intersects") return turf.booleanIntersects(source, t);
+      if(predicate==="within") return turf.booleanWithin(source, t);
+      if(predicate==="contains") return turf.booleanContains(source, t);
+    }catch(e){ return false; }
+    return false;
+  });
+  resultEl.innerHTML = matches.length
+    ? `<div class="import-summary"><b>${matches.length}</b> of ${targets.length} in "${escHtml(layer)}"</div>` +
+      matches.map(m=>`<div class="layer-row"><span class="layer-name">${escHtml(m.properties._title||m.properties._spatial_feature_name)}</span></div>`).join("")
+    : `<div class="empty-note">No matches among ${targets.length} feature(s) checked.</div>`;
+}
+
+// ─────────────────────────────  Heatmap / Density  ─────────────────────────────
+let gpHeatLayer = null;
+function populateHeatLayerSelect(){
+  const sel = document.getElementById("gpHeatLayer");
+  const cur = sel.value;
+  const pointLayers = new Set();
+  state.masterFC.features.forEach(f=>{
+    if(f.geometry && (f.geometry.type==="Point" || f.geometry.type==="MultiPoint")){
+      pointLayers.add(f.properties._layer || "Uncategorized");
+    }
+  });
+  const opts = Array.from(pointLayers).sort();
+  sel.innerHTML = opts.length
+    ? opts.map(l=>`<option value="${escHtml(l)}">${escHtml(l)}</option>`).join("")
+    : '<option value="">No point layers loaded</option>';
+  if(opts.includes(cur)) sel.value = cur;
+}
+function heatPointsFor(layerName){
+  const pts = [];
+  state.masterFC.features.forEach(f=>{
+    if((f.properties._layer||"Uncategorized") !== layerName) return;
+    if(f.geometry.type === "Point") pts.push([f.geometry.coordinates[1], f.geometry.coordinates[0]]);
+    else if(f.geometry.type === "MultiPoint") f.geometry.coordinates.forEach(c=>pts.push([c[1], c[0]]));
+  });
+  return pts;
+}
+function updateHeatmap(){
+  if(gpHeatLayer){ state.map.removeLayer(gpHeatLayer); gpHeatLayer = null; }
+  if(!document.getElementById("gpHeatShow").checked) return;
+  const layerName = document.getElementById("gpHeatLayer").value;
+  if(!layerName){ toast("No point layer selected.", true); document.getElementById("gpHeatShow").checked = false; return; }
+  const pts = heatPointsFor(layerName);
+  if(!pts.length){ toast("No points found in that layer.", true); document.getElementById("gpHeatShow").checked = false; return; }
+  const radius = parseFloat(document.getElementById("gpHeatRadius").value) || 25;
+  const blur = parseFloat(document.getElementById("gpHeatBlur").value) || 15;
+  gpHeatLayer = L.heatLayer(pts, {radius, blur, maxZoom: 17}).addTo(state.map);
+}
+
+// ─────────────────────────────  Weighted Overlay  ─────────────────────────────
+// A real vector overlay (not a raster one - this app has no raster data
+// model at all): geometrically intersects every polygon in Layer A against
+// every polygon in Layer B, blends each pair's (score x weight) where they
+// overlap, and keeps the correctly-scored leftover of each input that the
+// other layer doesn't cover (via turf.difference) - so the output is a
+// true partition of the combined area, not just the overlapping slice.
+// O(|A| x |B|) turf calls - fine at zone-layer scale (farm blocks, buffer
+// zones, ...), not meant for thousands of features per side.
+let woPreviewLayer = null;
+let woPreviewResults = null;
+
+function polygonLayerNames(){
+  const names = new Set();
+  state.masterFC.features.forEach(f=>{
+    if(f.geometry && (f.geometry.type==="Polygon" || f.geometry.type==="MultiPolygon")){
+      names.add(f.properties._layer || "Uncategorized");
+    }
+  });
+  return Array.from(names).sort();
+}
+function numericPropsForLayer(layerName){
+  const keys = new Set();
+  state.masterFC.features.forEach(f=>{
+    if((f.properties._layer||"Uncategorized") !== layerName) return;
+    Object.entries(f.properties||{}).forEach(([k,v])=>{
+      if(!k.startsWith("_") && v!=null && v!=="" && isFinite(parseFloat(v))) keys.add(k);
+    });
+  });
+  return Array.from(keys).sort();
+}
+function populateWeightedOverlayLayers(){
+  const names = polygonLayerNames();
+  const opts = names.map(n=>`<option value="${escHtml(n)}">${escHtml(n)}</option>`).join("")
+    || '<option value="">No polygon layers loaded</option>';
+  ["woLayerA","woLayerB"].forEach(id=>{
+    const sel = document.getElementById(id);
+    const cur = sel.value;
+    sel.innerHTML = opts;
+    if(names.includes(cur)) sel.value = cur;
+  });
+  populateWeightedOverlayProps("A");
+  populateWeightedOverlayProps("B");
+}
+function populateWeightedOverlayProps(which){
+  const layerName = document.getElementById("woLayer"+which).value;
+  const props = layerName ? numericPropsForLayer(layerName) : [];
+  const sel = document.getElementById("woProp"+which);
+  sel.innerHTML = props.length
+    ? props.map(p=>`<option value="${escHtml(p)}">${escHtml(p)}</option>`).join("")
+    : '<option value="">No numeric properties found</option>';
+}
+function scoreForFeature(f, mode, fixedScore, propKey){
+  if(mode === "uniform") return fixedScore;
+  const v = parseFloat((f.properties||{})[propKey]);
+  return isFinite(v) ? v : 0;
+}
+function woColorForScore(score, min, max){
+  if(min===max) return "#854F0B";
+  const t = Math.max(0, Math.min(1, (score-min)/(max-min)));
+  const r = Math.round(60 + t*160), g = Math.round(180 - t*160);
+  return `rgb(${r},${g},60)`;
+}
+function runWeightedOverlay(){
+  const resultEl = document.getElementById("woResult");
+  const layerA = document.getElementById("woLayerA").value, layerB = document.getElementById("woLayerB").value;
+  if(!layerA || !layerB || layerA === layerB){
+    resultEl.innerHTML = '<div class="import-fail">Pick two different polygon layers.</div>';
+    return;
+  }
+  const weightA = parseFloat(document.getElementById("woWeightA").value) || 0;
+  const weightB = parseFloat(document.getElementById("woWeightB").value) || 0;
+  const modeA = document.getElementById("woModeA").value, modeB = document.getElementById("woModeB").value;
+  const fixedA = parseFloat(document.getElementById("woFixedA").value) || 0;
+  const fixedB = parseFloat(document.getElementById("woFixedB").value) || 0;
+  const propA = document.getElementById("woPropA").value, propB = document.getElementById("woPropB").value;
+
+  const isPoly = f => f.geometry && (f.geometry.type==="Polygon" || f.geometry.type==="MultiPolygon");
+  const featsA = state.masterFC.features.filter(f=>(f.properties._layer||"Uncategorized")===layerA && isPoly(f));
+  const featsB = state.masterFC.features.filter(f=>(f.properties._layer||"Uncategorized")===layerB && isPoly(f));
+  if(!featsA.length || !featsB.length){
+    resultEl.innerHTML = '<div class="import-fail">Both layers need at least one polygon feature.</div>';
+    return;
+  }
+
+  const outputs = []; // {geometry, score, sources: [names]}
+  const safeIntersect = (a,b) => { try{ return turf.intersect(a,b); }catch(e){ return null; } };
+  const safeDifference = (a,b) => { try{ return turf.difference(a,b); }catch(e){ return null; } };
+
+  for(const a of featsA){
+    let remainingA = a;
+    const scoreA = scoreForFeature(a, modeA, fixedA, propA) * weightA;
+    for(const b of featsB){
+      if(!remainingA) break;
+      const inter = safeIntersect(remainingA, b);
+      if(inter){
+        const scoreB = scoreForFeature(b, modeB, fixedB, propB) * weightB;
+        outputs.push({geometry: inter.geometry, score: scoreA+scoreB, sources: [layerA, layerB]});
+        remainingA = safeDifference(remainingA, b);
+      }
+    }
+    if(remainingA) outputs.push({geometry: remainingA.geometry, score: scoreA, sources: [layerA]});
+  }
+  for(const b of featsB){
+    let remainingB = b;
+    for(const a of featsA){
+      if(!remainingB) break;
+      remainingB = safeDifference(remainingB, a);
+    }
+    if(remainingB) outputs.push({geometry: remainingB.geometry, score: scoreForFeature(b, modeB, fixedB, propB)*weightB, sources: [layerB]});
+  }
+
+  if(!outputs.length){
+    resultEl.innerHTML = '<div class="import-fail">Overlay produced nothing - check the two layers actually have geometry.</div>';
+    return;
+  }
+
+  const scores = outputs.map(o=>o.score);
+  const min = Math.min(...scores), max = Math.max(...scores);
+  if(woPreviewLayer) state.map.removeLayer(woPreviewLayer);
+  woPreviewLayer = L.geoJSON(outputs.map(o=>({type:"Feature", geometry:o.geometry, properties:{score:o.score}})), {
+    style: f => ({color:"#3a3a34", weight:1, fillColor: woColorForScore(f.properties.score, min, max), fillOpacity:.55}),
+    onEachFeature: (f,layer) => layer.bindTooltip("Score: "+fmtNum(f.properties.score,2)),
+  }).addTo(state.map);
+
+  woPreviewResults = outputs;
+  document.getElementById("woSaveBtn").disabled = false;
+  resultEl.innerHTML = `<div class="import-summary"><b>${outputs.length}</b> zone(s) · score range ${fmtNum(min,2)} – ${fmtNum(max,2)}</div>`;
+}
+async function saveWeightedOverlay(){
+  if(!woPreviewResults) return;
+  const btn = document.getElementById("woSaveBtn");
+  btn.disabled = true;
+  try{
+    for(const o of woPreviewResults){
+      await callMethod(API+"upsert_feature", {
+        geometry: JSON.stringify(o.geometry),
+        title: "Susceptibility zone (score "+fmtNum(o.score,2)+")",
+        source_module: "Map Viewer",
+        properties: {weighted_score: o.score, source_layers: o.sources},
+      });
+    }
+    toast(woPreviewResults.length+" susceptibility zone(s) saved.");
+    await loadAll(document.getElementById("farmFilter").value || undefined);
+  }catch(e){
+    toast("Save failed: "+e.message, true);
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+// ─────────────────────────────  Wire up UI  ─────────────────────────────
+function wireUI(){
+  document.getElementById("btnQuery").addEventListener("click", ()=>{ document.getElementById("dockTitle").textContent="Query"; switchDockTab("query"); togglePanel("panelDock"); });
+  document.getElementById("btnProcess").addEventListener("click", ()=>{ document.getElementById("dockTitle").textContent="Geoprocessing"; switchDockTab("process"); togglePanel("panelDock"); });
+  document.getElementById("btnHelp").addEventListener("click", ()=>{ document.getElementById("dockTitle").textContent="Help"; switchDockTab("help"); togglePanel("panelDock"); });
+  document.getElementById("viewTabMap").addEventListener("click", ()=>switchView("map"));
+  document.getElementById("viewTabLayout").addEventListener("click", ()=>switchView("layout"));
+  document.getElementById("layoutRefreshBtn").addEventListener("click", ()=>refreshLayoutPreview(true));
+  document.getElementById("layoutExportBtn").addEventListener("click", exportLayout);
+  // Everything except the map capture itself redraws cheaply against the
+  // already-cached layoutMapCanvas - no re-capture needed for these.
+  ["layoutPaperSize","layoutOrientation","layoutGrid","layoutNeatline","layoutScale","layoutNorth","layoutLegend","layoutLegendPos"].forEach(id=>{
+    document.getElementById(id).addEventListener("change", ()=>renderLayoutCanvas());
+  });
+  document.getElementById("layoutTitle").addEventListener("input", ()=>renderLayoutCanvas());
+  document.getElementById("btnDraw").addEventListener("click", ()=>togglePanel("panelDraw"));
+  document.getElementById("btnImport").addEventListener("click", openImportModal);
+  document.getElementById("btnExport").addEventListener("click", openExportModal);
+
+  document.querySelectorAll("[data-close]").forEach(btn=>{
+    btn.addEventListener("click", ()=>closePanel(btn.dataset.close));
+  });
+
+  document.querySelectorAll(".float-tab").forEach(t=>{
+    t.addEventListener("click", ()=>switchDockTab(t.dataset.tab));
+  });
+
+  document.querySelectorAll(".draw-opt").forEach(o=>{
+    o.addEventListener("click", ()=>setDrawMode(o.dataset.mode));
+  });
+
+  document.getElementById("farmFilter").addEventListener("change", async (e)=>{
+    await loadAll(e.target.value || undefined);
+    if(!document.getElementById("layoutOverlay").classList.contains("hidden")) refreshLayoutPreview(true);
+      refreshOpenAttrTabs();
+  });
+  document.getElementById("labelsToggle").addEventListener("change", (e)=>{
+    state.showLabels = e.target.checked;
+    renderMap();
+    if(!document.getElementById("layoutOverlay").classList.contains("hidden")) refreshLayoutPreview(true);
+      refreshOpenAttrTabs();
+  });
+
+  document.getElementById("labelSettingsBtn").addEventListener("click", openLabelSettingsModal);
+
+  document.getElementById("ssSearch").addEventListener("input", (e)=>{
+    state.filters.title = e.target.value;
+    document.getElementById("qResultCount").textContent = "";
+    renderMap();
+  });
+  document.getElementById("qRefDoctype").addEventListener("change", (e)=>{ state.filters.refDoctype = e.target.value; renderMap(); });
+  document.getElementById("qGeomType").addEventListener("change", (e)=>{ state.filters.geomType = e.target.value; renderMap(); });
+  document.getElementById("qLayer").addEventListener("change", (e)=>{ state.filters.layer = e.target.value; renderMap(); });
+  document.getElementById("qSourceModule").addEventListener("change", (e)=>{ state.filters.sourceModule = e.target.value; renderMap(); });
+  document.getElementById("qBboxToggle").addEventListener("change", (e)=>{ state.filters.bbox = e.target.checked; renderMap(); });
+  document.getElementById("qClearBtn").addEventListener("click", ()=>{
+    state.filters = {title:"", refDoctype:"", geomType:"", layer:"", sourceModule:"", bbox:false};
+    document.getElementById("ssSearch").value = "";
+    document.getElementById("qRefDoctype").value = "";
+    document.getElementById("qGeomType").value = "";
+    document.getElementById("qLayer").value = "";
+    document.getElementById("qSourceModule").value = "";
+    document.getElementById("qBboxToggle").checked = false;
+    renderMap();
+  });
+
+  document.getElementById("newFeatureClose").addEventListener("click", ()=>closeNewFeatureModal(true));
+  document.getElementById("nfCancelBtn").addEventListener("click", ()=>closeNewFeatureModal(true));
+  document.getElementById("nfSaveBtn").addEventListener("click", saveNewFeature);
+  document.getElementById("nfRefDoctype").addEventListener("change", refreshNfRefNameOptions);
+
+  document.getElementById("importClose").addEventListener("click", closeImportModal);
+  document.getElementById("importCancelBtn").addEventListener("click", closeImportModal);
+  document.getElementById("importFile").addEventListener("change", handleImportFile);
+  document.getElementById("importRunBtn").addEventListener("click", runImport);
+
+  document.getElementById("exportClose").addEventListener("click", closeExportModal);
+  document.getElementById("exportCancelBtn").addEventListener("click", closeExportModal);
+  document.getElementById("exportRunBtn").addEventListener("click", runExport);
+  document.getElementById("expFormat").addEventListener("change", updateExportFormatHint);
+  document.getElementById("expLayersAllBtn").addEventListener("click", ()=>{
+    document.querySelectorAll(".exp-layer-cb").forEach(cb=>cb.checked = true);
+  });
+  document.getElementById("expLayersNoneBtn").addEventListener("click", ()=>{
+    document.querySelectorAll(".exp-layer-cb").forEach(cb=>cb.checked = false);
+  });
+
+  document.getElementById("layerPropsClose").addEventListener("click", closeLayerProperties);
+  document.getElementById("layerPropsCancelBtn").addEventListener("click", closeLayerProperties);
+  document.getElementById("layerPropsSaveBtn").addEventListener("click", saveLayerProperties);
+  ["layerPropsColor","layerPropsColorMode","layerPropsColorBy","layerPropsWidth","layerPropsFillOpacity","layerPropsHollow"].forEach(id=>{
+    document.getElementById(id).addEventListener("input", previewLayerProperties);
+  });
+
+
+  document.getElementById("editCancelBtn").addEventListener("click", ()=>stopEditFeature(true));
+  document.getElementById("editSaveBtn").addEventListener("click", saveEditFeature);
+
+  document.getElementById("bufPreviewBtn").addEventListener("click", bufferPreview);
+  document.getElementById("bufSaveBtn").addEventListener("click", bufferSave);
+  document.getElementById("measStartBtn").addEventListener("click", measureToggle);
+  document.getElementById("measClearBtn").addEventListener("click", measureClear);
+  document.getElementById("centComputeBtn").addEventListener("click", centroidCompute);
+  document.getElementById("centSaveBtn").addEventListener("click", centroidSave);
+
+  document.getElementById("gpClipPreviewBtn").addEventListener("click", gpClipPreview);
+  document.getElementById("gpClipSaveBtn").addEventListener("click", ()=>gpSaveAsFeature("Clip result", gpClipSources, "gpClipSaveBtn"));
+  document.getElementById("gpUnionPreviewBtn").addEventListener("click", gpUnionPreview);
+  document.getElementById("gpUnionSaveBtn").addEventListener("click", ()=>gpSaveAsFeature("Union result", gpUnionSources, "gpUnionSaveBtn"));
+  document.getElementById("gpMergePreviewBtn").addEventListener("click", gpMergePreview);
+  document.getElementById("gpMergeSaveBtn").addEventListener("click", ()=>gpSaveAsFeature("Merge result", gpMergeSources, "gpMergeSaveBtn"));
+  document.getElementById("gpJoinRunBtn").addEventListener("click", gpRunJoin);
+
+  document.getElementById("gpHeatShow").addEventListener("change", updateHeatmap);
+  document.getElementById("gpHeatLayer").addEventListener("change", ()=>{ if(document.getElementById("gpHeatShow").checked) updateHeatmap(); });
+  document.getElementById("gpHeatRadius").addEventListener("input", ()=>{ if(document.getElementById("gpHeatShow").checked) updateHeatmap(); });
+  document.getElementById("gpHeatBlur").addEventListener("input", ()=>{ if(document.getElementById("gpHeatShow").checked) updateHeatmap(); });
+
+  ["A","B"].forEach(which=>{
+    document.getElementById("woLayer"+which).addEventListener("change", ()=>populateWeightedOverlayProps(which));
+    document.getElementById("woMode"+which).addEventListener("change", (e)=>{
+      const isProp = e.target.value === "property";
+      document.getElementById("woFixed"+which+"Field").style.display = isProp ? "none" : "";
+      document.getElementById("woProp"+which+"Field").style.display = isProp ? "" : "none";
+    });
+  });
+  document.getElementById("woRunBtn").addEventListener("click", runWeightedOverlay);
+  document.getElementById("woSaveBtn").addEventListener("click", saveWeightedOverlay);
+
+  document.getElementById("railToggleMobile").addEventListener("click", ()=>{
+    document.getElementById("ssRail").classList.toggle("open");
+  });
+}
+// Generic over however many tabs the dock has - the two built in (query,
+// process) plus whatever plugins/addDockTab() have appended since boot, so
+// a plugin's tab works identically to a native one with no special-casing.
+function switchDockTab(tab){
+  document.querySelectorAll(".float-tab").forEach(t=>t.classList.toggle("active", t.dataset.tab===tab));
+  document.querySelectorAll(".dock-tab-content").forEach(el=>{
+    el.style.display = el.dataset.tabContent===tab ? "block" : "none";
+  });
+  const activeTab = document.querySelector(`.float-tab[data-tab="${tab}"]`);
+  if(activeTab) document.getElementById("dockTitle").textContent = activeTab.textContent;
+}
+
+// ─────────────────────────────  Plugin API  ─────────────────────────────
+// Everything above this point is Map Viewer's own closed-over internals -
+// a plugin loaded as a separate <script> afterward can't reach any of it
+// directly. This is the one deliberate seam: a small, stable surface a
+// plugin can build against (add a toolbar button, add a dock tab, read the
+// selected feature, call any whitelisted backend method) without needing
+// to know how the core is implemented, so the core is free to change
+// without breaking plugins as long as this surface holds still.
+const pluginRegistry = [];
+let pluginsBooted = false; // true once the initial loadPlugins() pass has activated everything once
+
+function addToolbarButton({id, icon, title, label, onClick}){
+  if(id && document.getElementById(id)){
+    console.warn("Toolbar button already exists, not adding a duplicate:", id);
+    return document.getElementById(id);
+  }
+  const btn = document.createElement("button");
+  btn.className = "btn btn-sm";
+  if(id) btn.id = id;
+  if(title) btn.title = title;
+  btn.innerHTML = `<i class="fa-solid ${escHtml(icon||"fa-puzzle-piece")}"></i>${label?escHtml(label):""}`;
+  document.querySelector(".ss-ribbon-r").appendChild(btn);
+  if(onClick) btn.addEventListener("click", onClick);
+  return btn;
+}
+
+let pluginTabDividerAdded = false;
+function addDockTab({tab, label, render}){
+  if(document.querySelector(`.float-tab[data-tab="${tab}"]`)){
+    console.warn("Dock tab already exists:", tab);
+    return;
+  }
+  // Visually separates native tools (Query/Geoprocessing/Layout) from
+  // plugin-contributed tabs sharing the same dock - added once, before
+  // the first plugin tab, not per-tab.
+  if(!pluginTabDividerAdded){
+    const divider = document.createElement("div");
+    divider.className = "tab-divider";
+    divider.title = "Plugin tabs";
+    document.querySelector(".float-tabs").appendChild(divider);
+    pluginTabDividerAdded = true;
+  }
+  const tabBtn = document.createElement("div");
+  tabBtn.className = "float-tab";
+  tabBtn.dataset.tab = tab;
+  tabBtn.textContent = label;
+  tabBtn.addEventListener("click", ()=>{
+    document.getElementById("dockTitle").textContent = label;
+    switchDockTab(tab);
+    openPanel("panelDock");
+  });
+  document.querySelector(".float-tabs").appendChild(tabBtn);
+
+  const content = document.createElement("div");
+  content.className = "float-body dock-tab-content";
+  content.dataset.tabContent = tab;
+  content.style.display = "none";
+  content.id = "tab-"+tab;
+  document.getElementById("panelDock").appendChild(content);
+  if(render) render(content);
+  return content;
+}
+
+function activatePlugin(plugin){
+  try{ plugin.onActivate && plugin.onActivate(window.MapViewer); }
+  catch(e){ console.error("Plugin failed to activate:", plugin && plugin.id, e); }
+}
+
+function loadScriptOnce(src){
+  return new Promise((resolve, reject)=>{
+    if(document.querySelector(`script[data-plugin-src="${src}"]`)) return resolve();
+    const s = document.createElement("script");
+    s.src = src;
+    s.dataset.pluginSrc = src;
+    s.onload = ()=>resolve();
+    s.onerror = ()=>reject(new Error("Failed to load plugin script: "+src));
+    document.body.appendChild(s);
+  });
+}
+
+async function loadPlugins(){
+  let plugins = [];
+  try{
+    plugins = await callMethod("upande_spatial.api.plugins.get_enabled_plugins", {});
+  }catch(e){
+    console.error("Could not load Map Viewer plugins:", e);
+    return;
+  }
+  for(const p of plugins){
+    try{ await loadScriptOnce(p.script_url); }
+    catch(e){ console.error(e); }
+  }
+  pluginRegistry.forEach(activatePlugin);
+  pluginsBooted = true; // registerPlugin() below now activates immediately for anything registered from here on
+}
+
+// The API surface itself - deliberately small and mostly thin wrappers
+// around functions/state that already exist above, not new behaviour.
+window.MapViewer = {
+  registerPlugin(plugin){
+    pluginRegistry.push(plugin);
+    // During the normal boot sequence, loadPlugins() itself activates
+    // every registered plugin once, after all plugin scripts have loaded -
+    // activating here too would double-fire onActivate (this is exactly
+    // what caused EPANET's toolbar button to appear twice). Only a plugin
+    // registered some time AFTER that initial pass - none exist yet, but
+    // a future "install a plugin into an already-open page" flow would -
+    // needs this eager activation.
+    if(pluginsBooted) activatePlugin(plugin);
+  },
+  getMap(){ return state.map; },
+  getSelectedFeature(){ return state.selectedDetail; },
+  callMethod,
+  refreshLayers(){ return loadAll(document.getElementById("farmFilter").value || undefined); },
+  addToolbarButton,
+  addDockTab,
+  openDock(tab){ switchDockTab(tab); openPanel("panelDock"); },
+  toast, escHtml, fmtNum,
+};
+
+// ─────────────────────────────  Docked workspace (Golden Layout)  ─────────────────────────────
+// Contents / Map / Properties as real dockable, resizable, floatable panels
+// (drag a tab out and Golden Layout pops it into its own window) - this is
+// the actual desktop-GIS-shell piece, not a cosmetic reskin. The three
+// panels' content is the exact same DOM nodes that used to live in the
+// fixed rail / canvas / floating detail popover - moved in wholesale so
+// every listener already bound to them keeps working untouched.
+let glInstance = null;
+function setupGoldenLayout(onInitialised){
+  const glConfig = {
+    settings: {showPopoutIcon: true, showMaximiseIcon: true, showCloseIcon: false},
+    dimensions: {borderWidth: 6, minItemWidth: 200, minItemHeight: 120},
+    content: [{
+      type: "row",
+      content: [
+        {type: "component", componentName: "contents", componentState: {}, title: "Contents", width: 18, isClosable: false},
+        {type: "component", componentName: "mapArea", componentState: {}, title: "Map", isClosable: false},
+        {type: "component", componentName: "properties", componentState: {}, title: "Properties", width: 22, isClosable: false},
+      ],
+    }],
+  };
+
+  glInstance = new GoldenLayout(glConfig, $("#glContainer"));
+
+  glInstance.registerComponent("contents", function(container){
+    const el = document.getElementById("ssRail");
+    el.style.display = "flex";
+    el.style.width = "100%";
+    container.getElement().append(el);
+  });
+  glInstance.registerComponent("mapArea", function(container){
+    const el = document.getElementById("mapAreaHolder");
+    el.classList.add("gl-fill");
+    el.style.display = "flex";
+    container.getElement().append(el);
+    // Leaflet doesn't notice its container resizing on its own - Golden
+    // Layout's own resize event is what fires when a user drags a splitter
+    // or pops/floats a panel, so that's the hook to keep the map in sync.
+    container.on("resize", ()=>{ if(state.map) state.map.invalidateSize(); });
+  });
+  glInstance.registerComponent("properties", function(container){
+    const el = document.getElementById("panelDetail");
+    el.classList.add("gl-fill");
+    el.style.display = "flex";
+    container.getElement().append(el);
+  });
+
+  // GoldenLayout emits "initialised" SYNCHRONOUSLY from inside init() itself
+  // - registering this listener has to happen before calling init(), not
+  // after, or the event has already fired by the time anyone's listening
+  // and nothing downstream (map, UI wiring, data load) ever runs at all.
+  glInstance.on("initialised", onInitialised);
+  glInstance.init();
+  glInstance.updateSize();
+  window.addEventListener("resize", ()=>{ if(glInstance) glInstance.updateSize(); });
+}
+
+// ─────────────────────────────  Boot  ─────────────────────────────
+document.addEventListener("DOMContentLoaded", function(){
+  setupGoldenLayout(async function(){
+    initMap();
+    wireUI();
+    state.map.on("click", onMapClickForMeasure);
+    await loadAll();
+    await loadPlugins();
+  });
+});
+})();
+</script>
+
+{% endraw %}
+</article>
+</div>
+{% endblock %}

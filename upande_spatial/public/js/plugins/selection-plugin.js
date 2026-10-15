@@ -1,5 +1,5 @@
 // Selection Engine plugin for Map Viewer - built against the MapViewer
-// plugin API (see the "Plugin API" section in the map-viewer Web Page's
+// plugin API (see the "Plugin API" section in www/map-viewer.html's
 // own script). Adds spatial selection (click/box/polygon/radius) across
 // whatever features are currently loaded, plus a handful of bulk
 // operations (buffer/export/delete/merge/tag-as-layer) run on the current
