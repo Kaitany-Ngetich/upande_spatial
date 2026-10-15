@@ -9,6 +9,60 @@
     "marker_icon": null,
     "color_mode": "Fixed",
     "color_by_property": ""
+   },
+   {
+    "color": "#185FA5",
+    "feature_role": "Junction",
+    "geometry_type": "Point",
+    "layer_name": "Water Junctions",
+    "marker_icon": "circle-dot",
+    "color_mode": "Fixed",
+    "color_by_property": null
+   },
+   {
+    "color": "#228883",
+    "feature_role": "Reservoir",
+    "geometry_type": "Point",
+    "layer_name": "Water Reservoirs",
+    "marker_icon": "water",
+    "color_mode": "Fixed",
+    "color_by_property": null
+   },
+   {
+    "color": "#854F0B",
+    "feature_role": "Tank",
+    "geometry_type": "Point",
+    "layer_name": "Water Tanks",
+    "marker_icon": "box-archive",
+    "color_mode": "Fixed",
+    "color_by_property": null
+   },
+   {
+    "color": "#3B6D11",
+    "feature_role": "Pipe",
+    "geometry_type": "LineString",
+    "layer_name": "Water Pipes",
+    "marker_icon": null,
+    "color_mode": "Fixed",
+    "color_by_property": null
+   },
+   {
+    "color": "#b3261e",
+    "feature_role": "Pump",
+    "geometry_type": "LineString",
+    "layer_name": "Water Pumps",
+    "marker_icon": null,
+    "color_mode": "Fixed",
+    "color_by_property": null
+   },
+   {
+    "color": "#534AB7",
+    "feature_role": "Valve",
+    "geometry_type": "LineString",
+    "layer_name": "Water Valves",
+    "marker_icon": null,
+    "color_mode": "Fixed",
+    "color_by_property": null
    }
   ],
   "description": null,
@@ -102,69 +156,5 @@
   "modified": "2026-08-21 16:16:10.927100",
   "name": "Location",
   "reference_doctype": "Location"
- },
- {
-  "allowed_geometries": [
-   {
-    "color": "#185FA5",
-    "feature_role": "Junction",
-    "geometry_type": "Point",
-    "layer_name": "EPANET Junctions",
-    "marker_icon": "circle-dot",
-    "color_mode": "Fixed",
-    "color_by_property": null
-   },
-   {
-    "color": "#228883",
-    "feature_role": "Reservoir",
-    "geometry_type": "Point",
-    "layer_name": "EPANET Reservoirs",
-    "marker_icon": "water",
-    "color_mode": "Fixed",
-    "color_by_property": null
-   },
-   {
-    "color": "#854F0B",
-    "feature_role": "Tank",
-    "geometry_type": "Point",
-    "layer_name": "EPANET Tanks",
-    "marker_icon": "box-archive",
-    "color_mode": "Fixed",
-    "color_by_property": null
-   },
-   {
-    "color": "#3B6D11",
-    "feature_role": "Pipe",
-    "geometry_type": "LineString",
-    "layer_name": "EPANET Pipes",
-    "marker_icon": null,
-    "color_mode": "Fixed",
-    "color_by_property": null
-   },
-   {
-    "color": "#b3261e",
-    "feature_role": "Pump",
-    "geometry_type": "LineString",
-    "layer_name": "EPANET Pumps",
-    "marker_icon": null,
-    "color_mode": "Fixed",
-    "color_by_property": null
-   },
-   {
-    "color": "#534AB7",
-    "feature_role": "Valve",
-    "geometry_type": "LineString",
-    "layer_name": "EPANET Valves",
-    "marker_icon": null,
-    "color_mode": "Fixed",
-    "color_by_property": null
-   }
-  ],
-  "description": "Water network elements for the Map Viewer EPANET plugin - hydraulic attributes (elevation, diameter, demand, ...) live in each Spatial Feature's own properties JSON rather than dedicated fields here.",
-  "docstatus": 0,
-  "doctype": "Spatial Entity Config",
-  "modified": "2026-09-10 06:58:32.085067",
-  "name": "EPANET Network",
-  "reference_doctype": "EPANET Network"
  }
 ]

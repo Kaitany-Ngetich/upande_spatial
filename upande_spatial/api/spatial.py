@@ -24,6 +24,13 @@ from frappe.utils import cint, flt
 
 DEFAULT_ROLE = ""
 
+# Roles a single record legitimately owns MANY of - a Farm's water network
+# has hundreds of Pipes and Junctions, all sharing the same (reference_doctype,
+# reference_name, feature_role) triple. upsert_feature must never treat that
+# triple as a lookup key for these, or drawing a second pipe would silently
+# overwrite the first. Updating one of them is always by its own `name`.
+MULTI_INSTANCE_ROLES = ("Junction", "Tank", "Reservoir", "Pipe", "Pump", "Valve")
+
 
 def _as_geojson_feature(geometry, properties=None):
 	"""Accepts either a bare geometry dict ({"type": "Polygon", ...}) or an
@@ -181,7 +188,7 @@ def upsert_feature(
 	if name and frappe.db.exists("Spatial Feature", name):
 		existing_name = name
 		matched_by_name = True
-	elif reference_doctype and reference_name:
+	elif reference_doctype and reference_name and feature_role not in MULTI_INSTANCE_ROLES:
 		existing_name = frappe.db.get_value(
 			"Spatial Feature",
 			{

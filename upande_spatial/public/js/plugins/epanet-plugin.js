@@ -88,6 +88,17 @@ const OPTION_GROUPS = [
       {key:"hyd_demand_model", label:"Demand Model", type:"select", options:["DDA","PDA"], def:"DDA"},
       {key:"hyd_minimum_pressure", label:"Minimum Pressure (m)", def:0, showIf:(v)=>v.hyd_demand_model==="PDA"},
       {key:"hyd_required_pressure", label:"Required Pressure (m)", def:0.1, showIf:(v)=>v.hyd_demand_model==="PDA"},
+      {key:"hyd_headloss", label:"Headloss Formula", type:"select", options:["H-W","D-W","C-M"], def:"H-W", hint:"Pipe roughness is read as H-W C, D-W mm or C-M n"},
+      {key:"hyd_demand_multiplier", label:"Demand Multiplier", def:1, step:"any"},
+    ],
+  },
+  {
+    label: "Units & Fluid",
+    fields: [
+      {key:"hyd_flow_units", label:"Flow Units", type:"select", options:["LPS","LPM","MLD","CMH","CFS","GPM","MGD","IMGD","AFD"], def:"LPS", hint:"Map flow results, the EPANET report and .inp export use these. Element inputs stay in L/s."},
+      {key:"hyd_emitter_exponent", label:"Emitter Exponent", def:0.5, step:"any"},
+      {key:"hyd_specific_gravity", label:"Specific Gravity", def:1, step:"any"},
+      {key:"hyd_viscosity", label:"Relative Viscosity", def:1, step:"any"},
     ],
   },
   {
@@ -98,6 +109,8 @@ const OPTION_GROUPS = [
       {key:"time_pattern_timestep_min", label:"Pattern Timestep (min)", def:60},
       {key:"time_report_timestep_min", label:"Report Timestep (min)", def:60},
       {key:"time_start_clocktime", label:"Start Clocktime", type:"time", def:"00:00"},
+      {key:"time_quality_timestep_min", label:"Quality Timestep (min)", def:5, step:"any"},
+      {key:"time_statistic", label:"Statistic", type:"select", options:["None","Averaged","Minimum","Maximum","Range"], def:"None", hint:"Not None: results show this over the whole run (the time slider still shows each step)"},
     ],
   },
   {
@@ -107,6 +120,8 @@ const OPTION_GROUPS = [
       {key:"qual_chemical_name", label:"Chemical Name", type:"text", def:"", showIf:(v)=>v.qual_mode==="Chemical"},
       {key:"qual_units", label:"Units", type:"text", def:"mg/L", showIf:(v)=>v.qual_mode==="Chemical"},
       {key:"qual_trace_node", label:"Trace Node", type:"node-select", def:"", showIf:(v)=>v.qual_mode==="Trace"},
+      {key:"qual_diffusivity", label:"Relative Diffusivity", def:1, step:"any", showIf:(v)=>v.qual_mode!=="None"},
+      {key:"qual_tolerance", label:"Quality Tolerance", def:0.01, step:"any", showIf:(v)=>v.qual_mode!=="None"},
     ],
   },
   {
@@ -119,11 +134,34 @@ const OPTION_GROUPS = [
   {
     label: "Reactions",
     fields: [
-      {key:"react_bulk_coeff", label:"Bulk Reaction Coeff. (1/day)", def:0, step:"any"},
-      {key:"react_wall_coeff", label:"Wall Reaction Coeff. (1/day)", def:0, step:"any"},
+      {key:"react_bulk_coeff", label:"Global Bulk Coeff. (1/day)", def:0, step:"any", hint:"Negative = decay"},
+      {key:"react_wall_coeff", label:"Global Wall Coeff.", def:0, step:"any", hint:"m/day (1st order) or mg/m²/day (0 order)"},
+      {key:"react_order_bulk", label:"Bulk Reaction Order", def:1, step:"any"},
+      {key:"react_order_tank", label:"Tank Reaction Order", def:1, step:"any"},
+      {key:"react_order_wall", label:"Wall Reaction Order", type:"select", options:["0","1"], def:"1"},
+      {key:"react_limiting_potential", label:"Limiting Concentration", def:"", step:"any", hint:"Blank = no limit"},
+      {key:"react_roughness_correlation", label:"Roughness Correlation", def:"", step:"any", hint:"Blank = off"},
+    ],
+  },
+  {
+    label: "Report",
+    fields: [
+      {key:"report_status", label:"Status Report", type:"select", options:["No","Yes","Full"], def:"Yes"},
+      {key:"report_summary", label:"Input Summary", type:"select", options:["No","Yes"], def:"Yes"},
+      {key:"report_energy", label:"Pump Energy Table", type:"select", options:["No","Yes"], def:"No"},
     ],
   },
 ];
+
+// m3/s (what wntr returns) -> the network's Flow Units, for display.
+const FLOW_UNIT_FACTORS = {LPS:1000, LPM:60000, MLD:86.4, CMH:3600, CFS:35.3147, GPM:15850.32, MGD:22.8245, IMGD:19.0053, AFD:70.0457};
+const FLOW_UNIT_LABELS = {LPS:"L/s", LPM:"L/min", MLD:"ML/d", CMH:"m³/h", CFS:"ft³/s", GPM:"gpm", MGD:"MGD", IMGD:"IMGD", AFD:"ac·ft/d"};
+function flowUnits(result){
+  const u = (result && result.settings && result.settings.flow_units) || "";
+  return FLOW_UNIT_FACTORS[u] ? u : null;
+}
+function flowFactor(result){ const u = flowUnits(result); return u ? FLOW_UNIT_FACTORS[u] : 1; }
+function flowLabel(result){ const u = flowUnits(result); return u ? FLOW_UNIT_LABELS[u] : "m³/s"; }
 
 function optionFieldHtml(field, values, api){
   const raw = values[field.key];
@@ -141,7 +179,7 @@ function optionFieldHtml(field, values, api){
   } else if(field.type === "text"){
     input = `<input type="text" id="${id}" value="${api.escHtml(val||"")}">`;
   } else {
-    input = `<input type="number" id="${id}" value="${val}" ${field.step?`step="${field.step}"`:""}>`;
+    input = `<input type="number" id="${id}" value="${val==null?"":val}" ${field.step?`step="${field.step}"`:""}>`;
   }
   return `<div class="field" data-optfield="${field.key}" style="flex:1 1 220px"><label>${api.escHtml(field.label)}</label>${input}${field.hint?`<div class="hint" style="margin-top:2px">${api.escHtml(field.hint)}</div>`:""}</div>`;
 }
@@ -234,34 +272,181 @@ function openOptionsModal(api, network){
 }
 
 // ─────────────────────────────  Property forms  ─────────────────────────────
-// Deliberately a fixed, small field set per role rather than a fully
-// dynamic schema - covers what EPANET actually needs to solve, everything
-// else stays at a sane default.
+// Field set per role, modelled on the WN (Utilities) doctypes' EPANET
+// sections plus their asset/physical details. Everything lands in the
+// element's Spatial Feature `properties` JSON; the keys under "Hydraulics"
+// and "Water quality" are exactly what api/epanet.py's _build_model reads,
+// "Asset details" are record-keeping only (the solver never looks at them).
+// `library` fields are dropdowns of EPANET Patterns / Curves (fetched per
+// network via list_library when the modal opens); blank = none.
+// `blank:true` numbers may be left empty = "use the network's global value".
+const SECT_HYD = "Hydraulics", SECT_QUAL = "Water quality", SECT_ASSET = "Asset details";
+const QUALITY_FIELDS = [
+  {key:"initial_quality", label:"Initial quality (mg/L, hrs or %)", blank:true, section:SECT_QUAL},
+  {key:"source_type", label:"Quality source", def:"", options:["","CONCEN","MASS","FLOWPACED","SETPOINT"], section:SECT_QUAL},
+  {key:"source_strength", label:"Source strength (mg/L, MASS: mg/min)", blank:true, section:SECT_QUAL},
+  {key:"source_pattern", label:"Source pattern", library:"patterns", section:SECT_QUAL},
+];
+const COMMON_HEAD = [
+  {key:"in_model", label:"Include in model", def:"1", options:["1","0"], section:SECT_HYD},
+];
 const ROLE_FIELDS = {
-  Junction: [{key:"elevation_m", label:"Elevation (m)", def:0}, {key:"base_demand_lps", label:"Base demand (L/s)", def:0}],
-  Tank: [{key:"elevation_m", label:"Elevation (m)", def:0}, {key:"init_level_m", label:"Initial level (m)", def:1}, {key:"min_level_m", label:"Min level (m)", def:0}, {key:"max_level_m", label:"Max level (m)", def:10}, {key:"diameter_m", label:"Diameter (m)", def:5}],
-  Reservoir: [{key:"base_head_m", label:"Base head (m)", def:100}],
-  Pipe: [{key:"diameter_mm", label:"Diameter (mm)", def:150}, {key:"roughness", label:"Roughness (Hazen-Williams C)", def:100}],
-  Pump: [{key:"power_kw", label:"Power (kW)", def:5}],
-  Valve: [{key:"valve_type", label:"Valve type", def:"PRV", options:["PRV","PSV","PBV","FCV","TCV","GPV"]}, {key:"diameter_mm", label:"Diameter (mm)", def:150}, {key:"initial_setting", label:"Initial setting", def:0}],
+  Junction: [
+    ...COMMON_HEAD,
+    {key:"elevation_m", label:"Elevation (m)", def:0, section:SECT_HYD},
+    {key:"base_demand_lps", label:"Base demand (L/s)", def:0, section:SECT_HYD},
+    {key:"demand_pattern", label:"Demand pattern", library:"patterns", section:SECT_HYD},
+    {key:"demand_category", label:"Demand category", type:"text", section:SECT_HYD},
+    {key:"emitter_coeff", label:"Emitter coeff. (L/s per m½)", def:0, section:SECT_HYD},
+    ...QUALITY_FIELDS,
+    {key:"status", label:"Status", def:"Active", options:["Active","Inactive","Proposed","Decommissioned"], section:SECT_ASSET},
+    {key:"elevation_source", label:"Elevation source", def:"", options:["","Manual","DEM Auto","GPS Survey","LiDAR"], section:SECT_ASSET},
+    {key:"description", label:"Description", type:"text", section:SECT_ASSET},
+    {key:"mergin_feature_id", label:"Mergin feature ID", type:"text", section:SECT_ASSET},
+  ],
+  Tank: [
+    ...COMMON_HEAD,
+    {key:"elevation_m", label:"Base elevation (m)", def:0, section:SECT_HYD},
+    {key:"init_level_m", label:"Initial level (m)", def:1, section:SECT_HYD},
+    {key:"min_level_m", label:"Min level (m)", def:0, section:SECT_HYD},
+    {key:"max_level_m", label:"Max level (m)", def:10, section:SECT_HYD},
+    {key:"diameter_m", label:"Diameter (m)", def:5, section:SECT_HYD},
+    {key:"min_vol_m3", label:"Min volume (m³)", def:0, section:SECT_HYD},
+    {key:"vol_curve", label:"Volume curve", library:"curves.Volume", section:SECT_HYD},
+    {key:"overflow", label:"Can overflow", def:"0", options:["0","1"], section:SECT_HYD},
+    ...QUALITY_FIELDS,
+    {key:"mixing_model", label:"Mixing model", def:"", options:["","MIXED","2COMP","FIFO","LIFO"], section:SECT_QUAL},
+    {key:"mixing_fraction", label:"Mixing fraction (2COMP)", blank:true, section:SECT_QUAL},
+    {key:"bulk_coeff", label:"Bulk coeff. (1/day, blank = global)", blank:true, section:SECT_QUAL},
+    {key:"status", label:"Status", def:"In Service", options:["In Service","Offline","Under Maintenance","Decommissioned"], section:SECT_ASSET},
+    {key:"description", label:"Description", type:"text", section:SECT_ASSET},
+    {key:"mergin_feature_id", label:"Mergin feature ID", type:"text", section:SECT_ASSET},
+  ],
+  Reservoir: [
+    ...COMMON_HEAD,
+    {key:"base_head_m", label:"Total head (m)", def:100, section:SECT_HYD},
+    {key:"head_pattern", label:"Head pattern", library:"patterns", section:SECT_HYD},
+    ...QUALITY_FIELDS,
+    {key:"status", label:"Status", def:"In Service", options:["In Service","Offline","Under Maintenance","Decommissioned"], section:SECT_ASSET},
+    {key:"reservoir_type", label:"Reservoir type", def:"", options:["","Source Intake","Service Reservoir","Break Pressure Tank","External Network Connection"], section:SECT_ASSET},
+    {key:"capacity_m3", label:"Capacity (m³)", blank:true, section:SECT_ASSET},
+    {key:"water_source", label:"Water source", type:"text", section:SECT_ASSET},
+    {key:"description", label:"Description", type:"text", section:SECT_ASSET},
+    {key:"mergin_feature_id", label:"Mergin feature ID", type:"text", section:SECT_ASSET},
+  ],
+  Pipe: [
+    ...COMMON_HEAD,
+    {key:"diameter_mm", label:"Diameter (mm)", def:150, section:SECT_HYD},
+    {key:"roughness", label:"Roughness (H-W C / D-W mm / C-M n)", def:100, section:SECT_HYD},
+    {key:"minor_loss", label:"Minor loss coeff.", def:0, section:SECT_HYD},
+    {key:"initial_status", label:"Initial status", def:"Open", options:["Open","Closed","CV"], section:SECT_HYD},
+    {key:"length_override_m", label:"Length (m) - blank = from map", blank:true, section:SECT_HYD},
+    {key:"bulk_coeff", label:"Bulk coeff. (1/day, blank = global)", blank:true, section:SECT_QUAL},
+    {key:"wall_coeff", label:"Wall coeff. (blank = global)", blank:true, section:SECT_QUAL},
+    {key:"operational_status", label:"Operational status", def:"In Service", options:["In Service","Isolated","Abandoned","Proposed"], section:SECT_ASSET},
+    {key:"material", label:"Material", def:"", options:["","uPVC","HDPE","Ductile Iron","Cast Iron","Asbestos Cement","Steel","GRP","Other"], section:SECT_ASSET},
+    {key:"pressure_class", label:"Pressure class", type:"text", section:SECT_ASSET},
+    {key:"installation_year", label:"Installation year", blank:true, section:SECT_ASSET},
+    {key:"condition_grade", label:"Condition grade", def:"", options:["","1-Good","2-Fair","3-Poor","4-Critical"], section:SECT_ASSET},
+    {key:"description", label:"Description", type:"text", section:SECT_ASSET},
+    {key:"mergin_feature_id", label:"Mergin feature ID", type:"text", section:SECT_ASSET},
+  ],
+  Pump: [
+    ...COMMON_HEAD,
+    {key:"pump_curve", label:"Pump curve (blank = fixed power)", library:"curves.Pump", section:SECT_HYD},
+    {key:"power_kw", label:"Power (kW) - used when no curve", def:5, section:SECT_HYD},
+    {key:"speed", label:"Relative speed", def:1, section:SECT_HYD},
+    {key:"speed_pattern", label:"Speed pattern", library:"patterns", section:SECT_HYD},
+    {key:"efficiency_curve", label:"Efficiency curve", library:"curves.Efficiency", section:SECT_HYD},
+    {key:"energy_price", label:"Energy price (per kWh, 0 = global)", def:0, section:SECT_HYD},
+    {key:"energy_pattern", label:"Energy price pattern", library:"patterns", section:SECT_HYD},
+    {key:"initial_status", label:"Initial status", def:"Open", options:["Open","Closed"], section:SECT_HYD},
+    {key:"network_status", label:"Network status", def:"In Service", options:["In Service","Standby","Under Maintenance","Decommissioned"], section:SECT_ASSET},
+    {key:"pump_type", label:"Pump type", def:"", options:["","Centrifugal","Submersible","Borehole","Booster","End-Suction"], section:SECT_ASSET},
+    {key:"design_flow_m3h", label:"Design flow (m³/h)", blank:true, section:SECT_ASSET},
+    {key:"design_head_m", label:"Design head (m)", blank:true, section:SECT_ASSET},
+    {key:"motor_power_kw", label:"Motor power (kW)", blank:true, section:SECT_ASSET},
+    {key:"control_type", label:"Control type", def:"", options:["","Manual","Float Switch","Pressure Switch","VFD","SCADA"], section:SECT_ASSET},
+    {key:"description", label:"Description", type:"text", section:SECT_ASSET},
+    {key:"mergin_feature_id", label:"Mergin feature ID", type:"text", section:SECT_ASSET},
+  ],
+  Valve: [
+    ...COMMON_HEAD,
+    {key:"valve_type", label:"Valve type", def:"PRV", options:["PRV","PSV","PBV","FCV","TCV","GPV"], section:SECT_HYD},
+    {key:"diameter_mm", label:"Diameter (mm)", def:150, section:SECT_HYD},
+    {key:"initial_setting", label:"Setting (m, or L/s for FCV)", def:0, section:SECT_HYD},
+    {key:"headloss_curve", label:"Headloss curve (GPV only)", library:"curves.Headloss", section:SECT_HYD},
+    {key:"minor_loss", label:"Minor loss coeff.", def:0, section:SECT_HYD},
+    {key:"initial_status", label:"Initial status", def:"Active", options:["Active","Open","Closed"], section:SECT_HYD},
+    {key:"network_status", label:"Network status", def:"In Service", options:["In Service","Closed-Locked","Under Maintenance","Decommissioned"], section:SECT_ASSET},
+    {key:"valve_function", label:"Valve function", def:"", options:["","Isolating","Pressure Reducing","Pressure Sustaining","Flow Control","Air Release","Scour","Check"], section:SECT_ASSET},
+    {key:"actuation", label:"Actuation", def:"", options:["","Manual","Electric","Hydraulic","Pneumatic","Self-Actuating"], section:SECT_ASSET},
+    {key:"body_material", label:"Body material", def:"", options:["","Cast Iron","Ductile Iron","Brass","Stainless Steel","PVC","Bronze"], section:SECT_ASSET},
+    {key:"installation_depth_m", label:"Installation depth (m)", blank:true, section:SECT_ASSET},
+    {key:"chamber_type", label:"Chamber type", def:"", options:["","None","Surface Box","Valve Chamber","Chamber with Access Hatch"], section:SECT_ASSET},
+    {key:"description", label:"Description", type:"text", section:SECT_ASSET},
+    {key:"mergin_feature_id", label:"Mergin feature ID", type:"text", section:SECT_ASSET},
+  ],
 };
+let libraryCache = {patterns: [], curves: {}};
 
-function fieldsHtml(role, api){
-  return ROLE_FIELDS[role].map(f=>{
-    const id = "epanetField_"+f.key;
-    if(f.options){
-      return `<div class="field"><label>${api.escHtml(f.label)}</label><select id="${id}">${f.options.map(o=>`<option ${o===f.def?"selected":""}>${o}</option>`).join("")}</select></div>`;
-    }
-    return `<div class="field"><label>${api.escHtml(f.label)}</label><input type="number" id="${id}" value="${f.def}" step="any"></div>`;
-  }).join("");
+function libraryOptions(source){
+  if(source === "patterns") return libraryCache.patterns || [];
+  const type = source.split(".")[1];
+  return (libraryCache.curves || {})[type] || [];
 }
 
-function readFields(role){
-  const props = {};
+function fieldHtml(f, values, api){
+  const id = "epanetField_"+f.key;
+  const has = values && Object.prototype.hasOwnProperty.call(values, f.key) && values[f.key] !== null;
+  const val = has ? String(values[f.key]) : (f.def === undefined ? "" : String(f.def));
+  const label = `<label>${api.escHtml(f.label)}</label>`;
+  if(f.library){
+    const opts = libraryOptions(f.library).map(o=>`<option value="${api.escHtml(o)}" ${o===val?"selected":""}>${api.escHtml(o)}</option>`).join("");
+    return `<div class="field">${label}<select id="${id}"><option value="">— none —</option>${opts}</select></div>`;
+  }
+  if(f.options){
+    const opts = f.options.map(o=>`<option value="${api.escHtml(o)}" ${o===val?"selected":""}>${o===""?"—":api.escHtml(f.key==="in_model"||f.key==="overflow" ? (o==="1"?"Yes":"No") : o)}</option>`).join("");
+    return `<div class="field">${label}<select id="${id}">${opts}</select></div>`;
+  }
+  if(f.type === "text"){
+    return `<div class="field">${label}<input type="text" id="${id}" value="${api.escHtml(val)}"></div>`;
+  }
+  return `<div class="field">${label}<input type="number" id="${id}" value="${api.escHtml(val)}" step="any"></div>`;
+}
+
+function fieldsHtml(role, api, values){
+  const sections = [];
+  ROLE_FIELDS[role].forEach(f=>{
+    let sec = sections.find(s=>s.name===f.section);
+    if(!sec){ sec = {name:f.section, fields:[]}; sections.push(sec); }
+    sec.fields.push(f);
+  });
+  // Hydraulics open; quality and asset details folded away until needed.
+  return sections.map((sec, i)=>`
+    <details ${i===0?"open":""} style="margin-bottom:8px">
+      <summary style="cursor:pointer;font-weight:600;font-size:12.5px;margin-bottom:6px">${api.escHtml(sec.name)}</summary>
+      ${sec.fields.map(f=>fieldHtml(f, values, api)).join("")}
+    </details>`).join("");
+}
+
+// `previous` keeps keys this form doesn't know about (e.g. ones the network
+// generator or an older version wrote), so editing never drops data.
+function readFields(role, previous){
+  const props = Object.assign({}, previous || {});
   ROLE_FIELDS[role].forEach(f=>{
     const el = document.getElementById("epanetField_"+f.key);
     if(!el) return;
-    props[f.key] = f.options ? el.value : parseFloat(el.value);
+    const raw = el.value;
+    if(f.library || f.type === "text" || (f.options && f.options.includes(""))){
+      if(raw === "") delete props[f.key]; else props[f.key] = raw;
+    } else if(f.options){
+      props[f.key] = raw;
+    } else if(raw === "" || isNaN(parseFloat(raw))){
+      if(f.blank) delete props[f.key]; else props[f.key] = f.def;
+    } else {
+      props[f.key] = parseFloat(raw);
+    }
   });
   return props;
 }
@@ -321,8 +506,8 @@ async function onMapClickForPlacement(e){
   clearSnapMarker(api);
   placement.clicks.push(coord);
   if(placement.kind === "node"){
-    await openPropertyModal(api, placement.role, async (props)=>{
-      await createElement(api, placement.role, {type:"Point", coordinates: placement.clicks[0]}, props);
+    await openPropertyModal(api, placement.role, async (props, title)=>{
+      await createElement(api, placement.role, {type:"Point", coordinates: placement.clicks[0]}, props, title);
     });
     placement = null;
   } else if(placement.clicks.length < 2){
@@ -330,8 +515,8 @@ async function onMapClickForPlacement(e){
       ? `Snapped to ${snapped.title}. Now click the ${placement.role.toLowerCase()}'s end point.`
       : "Now click the "+placement.role.toLowerCase()+"'s end point (near the far node).");
   } else {
-    await openPropertyModal(api, placement.role, async (props)=>{
-      await createElement(api, placement.role, {type:"LineString", coordinates: placement.clicks.slice()}, props);
+    await openPropertyModal(api, placement.role, async (props, title)=>{
+      await createElement(api, placement.role, {type:"LineString", coordinates: placement.clicks.slice()}, props, title);
     });
     placement = null;
   }
@@ -346,11 +531,12 @@ function startPlacement(api, kind, role){
     : `Click the ${role}'s start point (at/near an existing node), then its end point.`);
 }
 
-async function createElement(api, role, geometry, properties){
+async function createElement(api, role, geometry, properties, title){
   try{
     await api.callMethod(API_EPANET+"add_element", {
       network: currentNetwork, feature_role: role,
       geometry: JSON.stringify(geometry), properties: JSON.stringify(properties),
+      title: title || undefined,
     });
     api.toast(role+" added.");
     await api.refreshLayers();
@@ -362,14 +548,21 @@ async function createElement(api, role, geometry, properties){
 
 // Small inline modal (built fresh each time, appended to <body>) so this
 // plugin doesn't need to touch Map Viewer's own modal markup at all.
-function openPropertyModal(api, role, onSave){
+// `existing` = {title, props} when editing an element, omitted for a new one.
+async function openPropertyModal(api, role, onSave, existing){
+  try{ libraryCache = await api.callMethod(API_EPANET+"list_library", {network: currentNetwork}) || libraryCache; }
+  catch(e){ /* dropdowns just stay empty - the element can still be created */ }
   return new Promise((resolve)=>{
     const scrim = document.createElement("div");
     scrim.className = "modal-scrim show";
+    const heading = existing ? `Edit ${api.escHtml(role)}` : `New ${api.escHtml(role)}`;
     scrim.innerHTML = `
       <div class="modal">
-        <div class="modal-head"><div class="modal-title">New ${api.escHtml(role)}</div><button class="float-close" id="epanetModalClose"><i class="fa-solid fa-xmark"></i></button></div>
-        <div class="modal-body">${fieldsHtml(role, api)}</div>
+        <div class="modal-head"><div class="modal-title">${heading}</div><button class="float-close" id="epanetModalClose"><i class="fa-solid fa-xmark"></i></button></div>
+        <div class="modal-body" style="max-height:66vh;overflow-y:auto">
+          <div class="field"><label>Name</label><input type="text" id="epanetFieldTitle" value="${api.escHtml((existing && existing.title) || "")}" placeholder="e.g. J-12 or Main line A"></div>
+          ${fieldsHtml(role, api, existing && existing.props)}
+        </div>
         <div class="modal-foot">
           <button class="btn" id="epanetModalCancel">Cancel</button>
           <button class="btn btn-primary" id="epanetModalSave">Save</button>
@@ -380,8 +573,9 @@ function openPropertyModal(api, role, onSave){
     scrim.querySelector("#epanetModalClose").addEventListener("click", close);
     scrim.querySelector("#epanetModalCancel").addEventListener("click", close);
     scrim.querySelector("#epanetModalSave").addEventListener("click", async ()=>{
-      const props = readFields(role);
-      await onSave(props);
+      const props = readFields(role, existing && existing.props);
+      const title = scrim.querySelector("#epanetFieldTitle").value.trim();
+      await onSave(props, title);
       scrim.remove();
       resolve();
     });
@@ -409,8 +603,25 @@ async function refreshElementList(api){
     <div class="layer-row">
       <span class="badge b-blue" style="flex-shrink:0">${api.escHtml(f.properties._feature_role)}</span>
       <span class="layer-name" title="${api.escHtml(f.properties._title||f.properties._spatial_feature_name)}">${api.escHtml(f.properties._title||f.properties._spatial_feature_name)}</span>
+      ${f.properties._props && f.properties._props.in_model !== undefined && String(f.properties._props.in_model)==="0" ? '<span class="badge" title="Excluded from the model">off</span>' : ""}
+      <button class="float-close" data-edit="${api.escHtml(f.properties._spatial_feature_name)}" title="Edit"><i class="fa-solid fa-pen"></i></button>
       <button class="float-close" data-del="${api.escHtml(f.properties._spatial_feature_name)}" title="Delete"><i class="fa-solid fa-trash"></i></button>
     </div>`).join("") : '<div class="empty-note">No elements yet - use Add Node / Add Link above.</div>';
+  listEl.querySelectorAll("[data-edit]").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      const f = feats.find(x=>x.properties._spatial_feature_name===btn.dataset.edit);
+      if(!f) return;
+      const role = f.properties._feature_role;
+      await openPropertyModal(api, role, async (props, title)=>{
+        try{
+          await api.callMethod(API_EPANET+"update_element", {name: btn.dataset.edit, properties: JSON.stringify(props), title: title || undefined});
+          api.toast(role+" updated.");
+          await api.refreshLayers();
+          await refreshElementList(api);
+        }catch(e){ api.toast("Could not update: "+e.message, true); }
+      }, {title: f.properties._title, props: f.properties._props || {}});
+    });
+  });
   listEl.querySelectorAll("[data-del]").forEach(btn=>{
     btn.addEventListener("click", async ()=>{
       try{
@@ -430,14 +641,48 @@ function clearResultLayer(api){
   resultLayerGroup = null;
 }
 
-async function drawResultLayer(api, network, result, nodeVarKey, linkVarKey){
+// node_results/link_results for one report timestep of an extended-period
+// run, rebuilt from result.timeseries in the same {name: {pressure,...}}
+// shape as the run's own final-step results. step == null -> final step.
+function resultsAtStep(result, step){
+  const ts = result.timeseries;
+  if(step == null || !ts || !ts.times || !ts.times.length){
+    return {nodeResults: result.node_results || {}, linkResults: result.link_results || {}};
+  }
+  const at = (table, name)=>{ const v = table && table[name]; return v ? v[step] : null; };
+  const node = ts.node || {}, link = ts.link || {};
+  const nodeResults = {}, linkResults = {};
+  Object.keys(node.pressure || {}).forEach(n=>{
+    nodeResults[n] = {pressure: at(node.pressure, n), head: at(node.head, n), quality: at(node.quality, n)};
+  });
+  Object.keys(link.flow || {}).forEach(n=>{
+    linkResults[n] = {flow: at(link.flow, n), velocity: at(link.velocity, n)};
+  });
+  return {nodeResults, linkResults};
+}
+
+function clockLabel(result, seconds){
+  const start = (result.settings && result.settings.start_clocktime_s) || 0;
+  const total = Math.round(start + seconds);
+  const day = Math.floor(total / 86400), rem = total % 86400;
+  const hhmm = String(Math.floor(rem/3600)).padStart(2,"0")+":"+String(Math.floor(rem%3600/60)).padStart(2,"0");
+  return day ? `Day ${day+1} ${hhmm}` : hhmm;
+}
+
+async function drawResultLayer(api, network, result, nodeVarKey, linkVarKey, step){
   clearResultLayer(api);
   const map = api.getMap();
   const fc = await api.callMethod(API_EPANET+"get_network_geojson", {network});
-  const nodeResults = result.node_results || {};
-  const linkResults = result.link_results || {};
-  const nodeVar = NODE_COLOR_VARS[nodeVarKey] || NODE_COLOR_VARS.pressure;
-  const linkVar = LINK_COLOR_VARS[linkVarKey] || LINK_COLOR_VARS.flow;
+  const {nodeResults, linkResults} = resultsAtStep(result, step);
+  let nodeVar = NODE_COLOR_VARS[nodeVarKey] || NODE_COLOR_VARS.pressure;
+  let linkVar = LINK_COLOR_VARS[linkVarKey] || LINK_COLOR_VARS.flow;
+  if(nodeVar === NODE_COLOR_VARS.quality){
+    nodeVar = Object.assign({}, nodeVar, {unit: (result.settings && result.settings.quality_units) || ""});
+  }
+  if(linkVar === LINK_COLOR_VARS.flow){
+    const k = flowFactor(result);
+    linkVar = Object.assign({}, linkVar, {unit: flowLabel(result), get:(r)=>r.flow!=null ? Math.abs(r.flow)*k : null});
+  }
 
   const nodeVals = Object.values(nodeResults).map(nodeVar.get).filter(v=>v!=null);
   const linkVals = Object.values(linkResults).map(linkVar.get).filter(v=>v!=null);
@@ -498,8 +743,30 @@ function renderResult(result, api, resultEl){
   const s = result.summary || {};
   let html = `<div class="kv-row"><span class="kv-l">Pressure</span><span class="kv-v">${api.fmtNum(s.min_pressure,1)} – ${api.fmtNum(s.max_pressure,1)} m</span></div>`;
   if(heads.length) html += `<div class="kv-row"><span class="kv-l">Head</span><span class="kv-v">${api.fmtNum(Math.min(...heads),1)} – ${api.fmtNum(Math.max(...heads),1)} m</span></div>`;
-  html += `<div class="kv-row"><span class="kv-l">Flow</span><span class="kv-v">${api.fmtNum(s.min_flow,4)} – ${api.fmtNum(s.max_flow,4)} m³/s</span></div>`;
+  const fk = flowFactor(result);
+  html += `<div class="kv-row"><span class="kv-l">Flow</span><span class="kv-v">${api.fmtNum(s.min_flow==null?null:s.min_flow*fk,3)} – ${api.fmtNum(s.max_flow==null?null:s.max_flow*fk,3)} ${api.escHtml(flowLabel(result))}</span></div>`;
   if(velocities.length) html += `<div class="kv-row"><span class="kv-l">Velocity</span><span class="kv-v">${api.fmtNum(Math.min(...velocities),3)} – ${api.fmtNum(Math.max(...velocities),3)} m/s</span></div>`;
+  if(s.min_junction_pressure_all_steps != null && (result.timeseries && (result.timeseries.times||[]).length > 1)){
+    html += `<div class="kv-row"><span class="kv-l">Pressure (whole run)</span><span class="kv-v">${api.fmtNum(s.min_junction_pressure_all_steps,1)} – ${api.fmtNum(s.max_junction_pressure_all_steps,1)} m</span></div>`;
+  }
+  const energy = Object.values(s.pump_energy_kwh || {});
+  if(energy.length){
+    const cost = Object.values(s.pump_cost || {}).reduce((a,b)=>a+(b||0), 0);
+    html += `<div class="kv-row"><span class="kv-l">Pump energy</span><span class="kv-v">${api.fmtNum(energy.reduce((a,b)=>a+(b||0),0),1)} kWh · cost ${api.fmtNum(cost,2)}</span></div>`;
+  }
+  const st = result.settings || {};
+  if(st.statistic && st.statistic !== "NONE"){
+    html += `<div class="hint" style="margin-top:4px">Values above are the run's ${api.escHtml(st.statistic.toLowerCase())} per element.</div>`;
+  }
+  if(st.excluded){
+    html += `<div class="hint" style="margin-top:4px">${st.excluded} element(s) excluded from the model.</div>`;
+  }
+  if(result.run){
+    html += `<div style="margin-top:6px;display:flex;gap:10px;font-size:12px"><a href="/app/epanet-simulation-run/${encodeURIComponent(result.run)}" target="_blank">EPANET report &amp; run record</a></div>`;
+  }
+  if(result.warnings && result.warnings.length){
+    html += `<div class="hint" style="color:#8a5a00;margin-top:6px">${result.warnings.map(w=>api.escHtml(w)).join("<br>")}</div>`;
+  }
   if(result.skipped_links && result.skipped_links.length){
     html += `<div class="hint" style="color:#b3261e;margin-top:6px">${result.skipped_links.length} link(s) skipped — `
       + result.skipped_links.map(sk=>api.escHtml(sk.name+": "+sk.reason)).join("; ") + "</div>";
@@ -597,7 +864,10 @@ function renderPanel(container, api){
 
     <div class="proc-card">
       <h4><i class="fa-solid fa-droplet" style="color:var(--blue)"></i>Simulation</h4>
-      <button class="btn btn-sm btn-primary" id="epanetRunBtn" style="width:100%;justify-content:center" disabled><i class="fa-solid fa-play"></i>Run simulation</button>
+      <div style="display:flex;gap:7px">
+        <button class="btn btn-sm btn-primary" id="epanetRunBtn" style="flex:1;justify-content:center" disabled><i class="fa-solid fa-play"></i>Run simulation</button>
+        <button class="btn btn-sm" id="epanetExportBtn" title="Download as an EPANET .inp file (opens in EPANET, QGIS, WNTR)" disabled><i class="fa-solid fa-file-export"></i>.inp</button>
+      </div>
       <label class="check-row" style="margin-top:8px"><input type="checkbox" id="epanetShowResults">Show results on map</label>
       <div class="field-row" id="epanetColorByRow" style="margin-top:6px;display:none">
         <div class="field"><label>Node color</label><select id="epanetNodeColorVar">
@@ -607,6 +877,10 @@ function renderPanel(container, api){
           <option value="flow">Flow</option><option value="velocity">Velocity</option>
         </select></div>
       </div>
+      <div class="field" id="epanetTimeRow" style="margin-top:6px;display:none">
+        <label>Time: <b id="epanetTimeLabel"></b></label>
+        <input type="range" id="epanetTimeStep" min="0" max="0" step="1" value="0" style="width:100%">
+      </div>
       <div id="epanetLegend"></div>
       <div id="epanetResult"></div>
     </div>
@@ -615,6 +889,7 @@ function renderPanel(container, api){
   const sel = container.querySelector("#epanetNetworkSelect");
   const optionsBtn = container.querySelector("#epanetOptionsBtn");
   const runBtn = container.querySelector("#epanetRunBtn");
+  const exportBtn = container.querySelector("#epanetExportBtn");
   const placeNodeBtn = container.querySelector("#epanetPlaceNodeBtn");
   const placeLinkBtn = container.querySelector("#epanetPlaceLinkBtn");
   const resultEl = container.querySelector("#epanetResult");
@@ -623,6 +898,37 @@ function renderPanel(container, api){
   const nodeColorSel = container.querySelector("#epanetNodeColorVar");
   const linkColorSel = container.querySelector("#epanetLinkColorVar");
   const legendEl = container.querySelector("#epanetLegend");
+  const timeRow = container.querySelector("#epanetTimeRow");
+  const timeSlider = container.querySelector("#epanetTimeStep");
+  const timeLabel = container.querySelector("#epanetTimeLabel");
+
+  // Slider over the run's report timesteps - only shown for an
+  // extended-period run (more than one timestep). Defaults to the last
+  // step, which is what node_results/link_results have always been.
+  // With a Statistic set, the slider gets one extra position past the last
+  // step showing that statistic (node_results/link_results), its default.
+  function statisticLabel(){
+    const st = lastResult && lastResult.settings && lastResult.settings.statistic;
+    return st && st !== "NONE" ? st.charAt(0)+st.slice(1).toLowerCase()+" (whole run)" : null;
+  }
+  function syncTimeSlider(){
+    const times = (lastResult && lastResult.timeseries && lastResult.timeseries.times) || [];
+    if(times.length < 2 || !showResultsCb.checked){ timeRow.style.display = "none"; return; }
+    timeRow.style.display = "block";
+    const max = times.length - 1 + (statisticLabel() ? 1 : 0);
+    if(Number(timeSlider.max) !== max){
+      timeSlider.max = max;
+      timeSlider.value = max;
+    }
+    const i = Number(timeSlider.value);
+    timeLabel.textContent = i >= times.length ? statisticLabel() : clockLabel(lastResult, times[i]);
+  }
+  function currentStep(){
+    const times = (lastResult && lastResult.timeseries && lastResult.timeseries.times) || [];
+    if(times.length < 2) return null;
+    const i = Number(timeSlider.value);
+    return i >= times.length ? null : i;
+  }
 
   async function updateResultsDisplay(){
     if(!showResultsCb.checked) return;
@@ -631,7 +937,8 @@ function renderPanel(container, api){
       catch(e){ /* fall through to the no-result toast below */ }
     }
     if(lastResult){
-      const ranges = await drawResultLayer(api, currentNetwork, lastResult, nodeColorSel.value, linkColorSel.value);
+      syncTimeSlider();
+      const ranges = await drawResultLayer(api, currentNetwork, lastResult, nodeColorSel.value, linkColorSel.value, currentStep());
       renderLegend(legendEl, api, ranges);
     } else {
       api.toast("Run a simulation first.", true);
@@ -645,9 +952,12 @@ function renderPanel(container, api){
     const has = !!currentNetwork;
     optionsBtn.disabled = !has;
     runBtn.disabled = !has;
+    exportBtn.disabled = !has;
     placeNodeBtn.disabled = !has;
     placeLinkBtn.disabled = !has;
     lastResult = null;
+    timeSlider.max = 0;
+    timeRow.style.display = "none";
     resultEl.innerHTML = "";
     showResultsCb.checked = false;
     colorByRow.style.display = "none";
@@ -731,6 +1041,7 @@ function renderPanel(container, api){
     try{
       const result = await api.callMethod(API_EPANET+"run_simulation", {network: currentNetwork});
       lastResult = result;
+      timeSlider.max = 0; // forces syncTimeSlider to jump to the new run's last step
       renderResult(result, api, resultEl);
       api.toast("Simulation complete.");
       await updateResultsDisplay();
@@ -741,10 +1052,17 @@ function renderPanel(container, api){
     }
   });
 
+  exportBtn.addEventListener("click", ()=>{
+    if(!currentNetwork) return;
+    // A plain navigation: the endpoint answers with a file download.
+    window.open("/api/method/"+API_EPANET+"export_inp?network="+encodeURIComponent(currentNetwork), "_blank");
+  });
+
   showResultsCb.addEventListener("change", async ()=>{
     if(!showResultsCb.checked){
       clearResultLayer(api);
       colorByRow.style.display = "none";
+      timeRow.style.display = "none";
       legendEl.innerHTML = "";
       return;
     }
@@ -754,6 +1072,8 @@ function renderPanel(container, api){
 
   nodeColorSel.addEventListener("change", updateResultsDisplay);
   linkColorSel.addEventListener("change", updateResultsDisplay);
+  timeSlider.addEventListener("input", ()=>{ syncTimeSlider(); });
+  timeSlider.addEventListener("change", updateResultsDisplay);
 }
 
 window.MapViewer.registerPlugin({

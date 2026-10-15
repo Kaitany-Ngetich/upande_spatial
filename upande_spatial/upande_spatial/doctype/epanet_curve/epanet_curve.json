@@ -1,0 +1,121 @@
+{
+ "actions": [],
+ "allow_bulk_edit": 1,
+ "allow_rename": 1,
+ "autoname": "field:curve_name",
+ "creation": "2026-09-24 08:07:44.538926",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "curve_name",
+  "curve_type",
+  "column_break_1",
+  "network",
+  "description",
+  "x_unit",
+  "y_unit",
+  "section_break_1",
+  "points"
+ ],
+ "fields": [
+  {
+   "fieldname": "curve_name",
+   "fieldtype": "Data",
+   "label": "Curve Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "Pump",
+   "description": "Pump: X = flow (L/s), Y = head (m). Efficiency: X = flow (L/s), Y = efficiency (%). Volume: X = tank depth (m), Y = volume (m³). Headloss (GPV valves): X = flow (L/s), Y = headloss (m).",
+   "fieldname": "curve_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Curve Type",
+   "options": "Pump\nEfficiency\nVolume\nHeadloss",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Leave blank to share this curve across every network.",
+   "fieldname": "network",
+   "fieldtype": "Link",
+   "label": "Network",
+   "options": "EPANET Network"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break",
+   "label": "Points"
+  },
+  {
+   "fieldname": "points",
+   "fieldtype": "Table",
+   "label": "Points",
+   "options": "EPANET Curve Point",
+   "reqd": 1
+  },
+  {
+   "fieldname": "x_unit",
+   "fieldtype": "Data",
+   "label": "X Unit",
+   "description": "e.g. L/s for pump/efficiency/headloss curves, m for volume curves"
+  },
+  {
+   "fieldname": "y_unit",
+   "fieldtype": "Data",
+   "label": "Y Unit",
+   "description": "e.g. m (head), % (efficiency), m³ (volume)"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-01 21:02:36.189305",
+ "modified_by": "Administrator",
+ "module": "Upande Spatial",
+ "name": "EPANET Curve",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "All",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

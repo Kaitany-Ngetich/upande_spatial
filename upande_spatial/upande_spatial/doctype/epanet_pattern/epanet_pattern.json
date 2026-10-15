@@ -1,0 +1,113 @@
+{
+ "actions": [],
+ "allow_bulk_edit": 1,
+ "allow_rename": 1,
+ "autoname": "field:pattern_name",
+ "creation": "2026-09-24 08:07:43.745474",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "pattern_name",
+  "network",
+  "column_break_1",
+  "description",
+  "pattern_type",
+  "time_step_hours",
+  "section_break_1",
+  "multipliers"
+ ],
+ "fields": [
+  {
+   "fieldname": "pattern_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Pattern Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "Leave blank to share this pattern across every network.",
+   "fieldname": "network",
+   "fieldtype": "Link",
+   "label": "Network",
+   "options": "EPANET Network"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "description": "One multiplier per Pattern Timestep of the network (e.g. 24 rows for hourly steps over a day). The pattern repeats once it runs out.",
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break",
+   "label": "Multipliers"
+  },
+  {
+   "fieldname": "multipliers",
+   "fieldtype": "Table",
+   "label": "Multipliers",
+   "options": "EPANET Pattern Multiplier",
+   "reqd": 1
+  },
+  {
+   "fieldname": "pattern_type",
+   "fieldtype": "Select",
+   "label": "Pattern Type",
+   "options": "\nDemand\nHead\nSpeed\nQuality\nPrice",
+   "description": "What this pattern is meant to drive - for organising the library, the solver itself does not check it"
+  },
+  {
+   "fieldname": "time_step_hours",
+   "fieldtype": "Float",
+   "label": "Time Step (hours)",
+   "description": "Hours each multiplier lasts. Blank = the network's Pattern Timestep. A different step is resampled onto the network's step when simulating."
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-10-01 21:02:36.189305",
+ "modified_by": "Administrator",
+ "module": "Upande Spatial",
+ "name": "EPANET Pattern",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "All",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
