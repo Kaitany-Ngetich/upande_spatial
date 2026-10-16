@@ -16,10 +16,14 @@
   "duration_seconds",
   "node_count",
   "link_count",
+  "overview_section",
+  "overview_html",
   "section_break_1",
   "warnings",
   "error",
+  "report_section",
   "report",
+  "raw_section",
   "results"
  ],
  "fields": [
@@ -76,34 +80,60 @@
    "read_only": 1
   },
   {
-   "fieldname": "section_break_1",
+   "fieldname": "overview_section",
    "fieldtype": "Section Break",
-   "label": "Output"
+   "label": "Overview"
   },
   {
+   "fieldname": "overview_html",
+   "fieldtype": "HTML",
+   "label": "Overview"
+  },
+  {
+   "collapsible": 0,
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break",
+   "label": "Messages"
+  },
+  {
+   "depends_on": "warnings",
    "fieldname": "warnings",
    "fieldtype": "Small Text",
    "label": "Warnings",
    "read_only": 1
   },
   {
+   "depends_on": "error",
    "fieldname": "error",
    "fieldtype": "Long Text",
    "label": "Error",
    "read_only": 1
   },
   {
+   "collapsible": 1,
+   "fieldname": "report_section",
+   "fieldtype": "Section Break",
+   "label": "EPANET Report (text)"
+  },
+  {
+   "description": "EPANET's own text report for this run, in the network's flow units",
+   "fieldname": "report",
+   "fieldtype": "Long Text",
+   "label": "EPANET Report",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "description": "Everything the simulation produced, for integrations and debugging. The Overview above, the EPANET reports and the Map Viewer present it in readable form.",
+   "fieldname": "raw_section",
+   "fieldtype": "Section Break",
+   "label": "Raw Results (JSON)"
+  },
+  {
    "fieldname": "results",
    "fieldtype": "Long Text",
    "label": "Results (JSON)",
    "read_only": 1
-  },
-  {
-   "fieldname": "report",
-   "fieldtype": "Long Text",
-   "label": "EPANET Report",
-   "read_only": 1,
-   "description": "EPANET's own text report for this run, in the network's flow units"
   }
  ],
  "grid_page_length": 50,
