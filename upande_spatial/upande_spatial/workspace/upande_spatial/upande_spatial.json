@@ -1,7 +1,7 @@
 {
  "app": "upande_spatial",
  "charts": [],
- "content": "[{\"data\": {\"col\": 12, \"text\": \"<span class=\\\"h4\\\"><b>Upande Spatial</b></span>\"}, \"id\": \"header\", \"type\": \"header\"}, {\"data\": {\"col\": 12, \"text\": \"One place for every map feature in ERP - farm and block boundaries, warehouses, water networks and other utility lines (pipes, power and internet cables) - drawn here, in QGIS or in the field app, and linked to the records they belong to. Water networks can be simulated with EPANET, and field teams inspect assets along planned routes.\"}, \"id\": \"para\", \"type\": \"paragraph\"}, {\"data\": {\"col\": 12, \"text\": \"Shortcuts\"}, \"id\": \"shortcuts_header\", \"type\": \"header\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Spatial Feature\"}, \"id\": \"shortcuts\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Spatial Entity Config\"}, \"id\": \"shortcuts2\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Map Viewer\"}, \"id\": \"shortcuts3\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Map Viewer Plugins\"}, \"id\": \"shortcuts4\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Spatial Data Catalog\"}, \"id\": \"shortcuts5\", \"type\": \"shortcut\"}, {\"id\": \"inspections_header\", \"type\": \"header\", \"data\": {\"col\": 12, \"text\": \"Field Inspections\"}}, {\"id\": \"inspection_shortcut1\", \"type\": \"shortcut\", \"data\": {\"col\": 3, \"shortcut_name\": \"Inspection Plans\"}}, {\"id\": \"inspection_shortcut2\", \"type\": \"shortcut\", \"data\": {\"col\": 3, \"shortcut_name\": \"Open Inspection Runs\"}}, {\"id\": \"inspection_shortcut3\", \"type\": \"shortcut\", \"data\": {\"col\": 3, \"shortcut_name\": \"Failed Checks\"}}, {\"id\": \"modules_header\", \"type\": \"header\", \"data\": {\"col\": 12, \"text\": \"Modules\"}}, {\"id\": \"epanet_card\", \"type\": \"card\", \"data\": {\"card_name\": \"Water Network (EPANET)\", \"col\": 4}}, {\"id\": \"inspections_card\", \"type\": \"card\", \"data\": {\"card_name\": \"Field Inspections\", \"col\": 4}}]",
+ "content": "[{\"data\": {\"col\": 12, \"text\": \"<span class=\\\"h4\\\"><b>Upande Spatial</b></span>\"}, \"id\": \"header\", \"type\": \"header\"}, {\"data\": {\"col\": 12, \"text\": \"One place for every map feature in ERP - farm and block boundaries, warehouses, water networks and other utility lines (pipes, power and internet cables) - drawn here, in QGIS or in the field app, and linked to the records they belong to. Water networks can be simulated with EPANET, and field teams inspect assets along planned routes.\"}, \"id\": \"para\", \"type\": \"paragraph\"}, {\"data\": {\"col\": 12, \"text\": \"Shortcuts\"}, \"id\": \"shortcuts_header\", \"type\": \"header\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Spatial Feature\"}, \"id\": \"shortcuts\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Spatial Entity Config\"}, \"id\": \"shortcuts2\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Map Viewer\"}, \"id\": \"shortcuts3\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Map Viewer Plugins\"}, \"id\": \"shortcuts4\", \"type\": \"shortcut\"}, {\"data\": {\"col\": 3, \"shortcut_name\": \"Spatial Data Catalog\"}, \"id\": \"shortcuts5\", \"type\": \"shortcut\"}, {\"id\": \"inspections_header\", \"type\": \"header\", \"data\": {\"col\": 12, \"text\": \"Field Inspections\"}}, {\"id\": \"inspection_shortcut1\", \"type\": \"shortcut\", \"data\": {\"col\": 3, \"shortcut_name\": \"Inspection Plans\"}}, {\"id\": \"inspection_shortcut2\", \"type\": \"shortcut\", \"data\": {\"col\": 3, \"shortcut_name\": \"Open Inspection Runs\"}}, {\"id\": \"inspection_shortcut3\", \"type\": \"shortcut\", \"data\": {\"col\": 3, \"shortcut_name\": \"Failed Checks\"}}, {\"id\": \"sensors_header\", \"type\": \"header\", \"data\": {\"col\": 12, \"text\": \"Sensors\"}}, {\"id\": \"sensor_shortcut\", \"type\": \"shortcut\", \"data\": {\"col\": 3, \"shortcut_name\": \"Network Sensors\"}}, {\"id\": \"modules_header\", \"type\": \"header\", \"data\": {\"col\": 12, \"text\": \"Modules\"}}, {\"id\": \"epanet_card\", \"type\": \"card\", \"data\": {\"card_name\": \"Water Network (EPANET)\", \"col\": 4}}, {\"id\": \"inspections_card\", \"type\": \"card\", \"data\": {\"card_name\": \"Field Inspections\", \"col\": 4}}, {\"id\": \"sensors_card\", \"type\": \"card\", \"data\": {\"card_name\": \"Sensors\", \"col\": 4}}]",
  "creation": "2026-10-15 18:13:57.911349",
  "custom_blocks": [],
  "docstatus": 0,
@@ -141,9 +141,28 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Sensors",
+   "link_count": 1,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Network Sensor Links",
+   "link_count": 0,
+   "link_to": "Network Sensor Link",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2026-10-15 18:33:47.345779",
+ "modified": "2026-10-17 01:13:57.393973",
  "modified_by": "Administrator",
  "module": "Upande Spatial",
  "name": "Upande Spatial",
@@ -209,6 +228,14 @@
    "label": "Failed Checks",
    "link_to": "Field Inspection Visit",
    "stats_filter": "[[\"Field Inspection Visit\", \"status\", \"=\", \"Failed\"]]",
+   "type": "DocType"
+  },
+  {
+   "color": "Cyan",
+   "doc_view": "List",
+   "label": "Network Sensors",
+   "link_to": "Network Sensor Link",
+   "stats_filter": "[[\"Network Sensor Link\", \"enabled\", \"=\", 1]]",
    "type": "DocType"
   }
  ],

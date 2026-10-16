@@ -156,6 +156,10 @@ has_permission = {
 scheduler_events = {
 	# Repeating Field Inspection Plans that are due get their next run.
 	"daily": ["upande_spatial.api.inspection.create_scheduled_runs"],
+	"cron": {
+		# Latest value of every linked sensor (readings stay in the sensor module).
+		"*/15 * * * *": ["upande_spatial.api.sensors.refresh_latest"],
+	},
 }
 
 # scheduler_events = {

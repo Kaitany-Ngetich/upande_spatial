@@ -1,0 +1,265 @@
+{
+ "actions": [],
+ "autoname": "format:NSL-{#####}",
+ "creation": "2026-10-17 09:00:00.000000",
+ "description": "Links a sensor that another module already reads (Sensor Readings) to an element of an EPANET network, so measured values can be shown on the map and compared with the model. Read-only: devices and readings are managed in the sensor module.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "sensor_label",
+  "enabled",
+  "column_break_1",
+  "network",
+  "element",
+  "element_role",
+  "section_break_src",
+  "source_doctype",
+  "deveui",
+  "column_break_2",
+  "sensor_type",
+  "source_unit",
+  "section_break_q",
+  "quantity",
+  "model_unit",
+  "column_break_3",
+  "factor",
+  "offset",
+  "flow_direction",
+  "section_break_last",
+  "last_value",
+  "last_raw_value",
+  "column_break_4",
+  "last_reading_at",
+  "last_checked_at",
+  "source_status",
+  "section_break_notes",
+  "notes"
+ ],
+ "fields": [
+  {
+   "description": "A name people recognise, e.g. \"Reservoir outlet flow meter\".",
+   "fieldname": "sensor_label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Sensor",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "network",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "EPANET Network",
+   "options": "EPANET Network",
+   "reqd": 1
+  },
+  {
+   "description": "The junction, pipe, tank or reservoir this sensor measures - its model value is what the readings are compared with.",
+   "fieldname": "element",
+   "fieldtype": "Link",
+   "label": "Network Element",
+   "options": "Spatial Feature",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "element.feature_role",
+   "fieldname": "element_role",
+   "fieldtype": "Data",
+   "label": "Element Type",
+   "read_only": 1
+  },
+  {
+   "description": "Readings stay in the sensor module's Sensor Readings - nothing is copied. These pick this sensor's rows.",
+   "fieldname": "section_break_src",
+   "fieldtype": "Section Break",
+   "label": "Where the readings come from"
+  },
+  {
+   "default": "Sensor Readings",
+   "fieldname": "source_doctype",
+   "fieldtype": "Data",
+   "label": "Source DocType",
+   "reqd": 1
+  },
+  {
+   "fieldname": "deveui",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Device EUI (deveui)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "As it appears in Sensor Readings, e.g. flow, volume, pressure. Blank = every reading of the device.",
+   "fieldname": "sensor_type",
+   "fieldtype": "Data",
+   "label": "Sensor Type"
+  },
+  {
+   "description": "For reference, e.g. bar, m3/h, m3.",
+   "fieldname": "source_unit",
+   "fieldtype": "Data",
+   "label": "Unit in Source"
+  },
+  {
+   "fieldname": "section_break_q",
+   "fieldtype": "Section Break",
+   "label": "Quantity and conversion"
+  },
+  {
+   "fieldname": "quantity",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Quantity",
+   "options": "Pressure\nFlow rate\nVolume\nLevel\nHead\nOther",
+   "reqd": 1
+  },
+  {
+   "description": "Readings are converted to this: m, L/s or m3.",
+   "fieldname": "model_unit",
+   "fieldtype": "Data",
+   "label": "Model Unit",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Multiply source values by this: bar → m 10.197, m3/h → L/s 0.27778, kPa → m 0.10197.",
+   "fieldname": "factor",
+   "fieldtype": "Float",
+   "label": "Factor"
+  },
+  {
+   "default": "0",
+   "description": "Then add this, e.g. gauge height above ground, or a tank's floor level for level → head.",
+   "fieldname": "offset",
+   "fieldtype": "Float",
+   "label": "Offset"
+  },
+  {
+   "default": "+1",
+   "depends_on": "eval:doc.quantity=='Flow rate'",
+   "description": "-1 if the meter faces the opposite way to the modelled pipe.",
+   "fieldname": "flow_direction",
+   "fieldtype": "Select",
+   "label": "Flow Direction",
+   "options": "+1\n-1"
+  },
+  {
+   "fieldname": "section_break_last",
+   "fieldtype": "Section Break",
+   "label": "Latest reading"
+  },
+  {
+   "fieldname": "last_value",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Last Value",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_raw_value",
+   "fieldtype": "Float",
+   "label": "Last Raw Value",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_4",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_reading_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Last Reading At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_checked_at",
+   "fieldtype": "Datetime",
+   "label": "Last Checked At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_status",
+   "fieldtype": "Data",
+   "label": "Source Status",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_notes",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-17 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Upande Spatial",
+ "name": "Network Sensor Link",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Inspection Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Field Inspector"
+  }
+ ],
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "sensor_label",
+ "track_changes": 1
+}
