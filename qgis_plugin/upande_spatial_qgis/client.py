@@ -183,6 +183,10 @@ class ErpClient:
 	def run_simulation(self, network):
 		return self.call(EPANET_API + "run_simulation", network=network)
 
+	def import_results(self, network, nodes, links, flow_units="LPS", note=None):
+		return self.call("upande_spatial.api.epanet_import.import_results", network=network, nodes=nodes, links=links,
+			flow_units=flow_units, source="QGIS (Gusnet)", note=note)
+
 	def export_inp(self, network):
 		return self.download(EPANET_API + "export_inp", network=network)
 
