@@ -78,7 +78,16 @@
   "column_break_report2",
   "report_energy",
   "section_break_controls",
-  "controls"
+  "controls",
+  "section_break_insp",
+  "insp_pipe_rating_m",
+  "insp_min_pressure_m",
+  "insp_max_emitter_pressure_m",
+  "column_break_insp",
+  "insp_max_swing_m",
+  "insp_max_velocity",
+  "insp_min_velocity",
+  "insp_max_headloss_m_km"
  ],
  "fields": [
   {
@@ -502,6 +511,66 @@
    "fieldtype": "Link",
    "label": "Calibrated By",
    "options": "User"
+  },
+  {
+   "fieldname": "section_break_insp",
+   "fieldtype": "Section Break",
+   "label": "Inspection Thresholds",
+   "collapsible": 1,
+   "description": "Limits used by \"Plan inspection\" on a Simulation Run to decide which junctions and pipes need a field visit. Set them to match this network's pipes and emitters; 0 switches a rule off."
+  },
+  {
+   "fieldname": "insp_pipe_rating_m",
+   "fieldtype": "Float",
+   "label": "Pipe Pressure Rating (m)",
+   "default": "60",
+   "description": "Highest pressure the pipes are rated for - PN6 ≈ 60 m, PN10 ≈ 100 m. Above it: burst risk."
+  },
+  {
+   "fieldname": "insp_min_pressure_m",
+   "fieldtype": "Float",
+   "label": "Minimum Service Pressure (m)",
+   "default": "10",
+   "description": "Drip ≈ 10 m, sprinklers ≈ 25 m. Below it the crop is under-watered."
+  },
+  {
+   "fieldname": "insp_max_emitter_pressure_m",
+   "fieldtype": "Float",
+   "label": "Max Pressure at Emitters (m)",
+   "default": "0",
+   "description": "e.g. 40 m for non-compensating drip. 0 = off."
+  },
+  {
+   "fieldname": "column_break_insp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "insp_max_swing_m",
+   "fieldtype": "Float",
+   "label": "Max Daily Pressure Swing (m)",
+   "default": "20",
+   "description": "Highest minus lowest pressure at a junction during the run - large swings mean surge."
+  },
+  {
+   "fieldname": "insp_max_velocity",
+   "fieldtype": "Float",
+   "label": "Max Velocity (m/s)",
+   "default": "2",
+   "description": "Above it: erosion, noise and water hammer."
+  },
+  {
+   "fieldname": "insp_min_velocity",
+   "fieldtype": "Float",
+   "label": "Stagnant Below (m/s)",
+   "default": "0.3",
+   "description": "A pipe whose peak velocity stays below this collects sediment - flush it."
+  },
+  {
+   "fieldname": "insp_max_headloss_m_km",
+   "fieldtype": "Float",
+   "label": "Max Headloss (m per km)",
+   "default": "10",
+   "description": "Steeper than this: undersized pipe, a partly closed valve or a blockage."
   }
  ],
  "grid_page_length": 50,
