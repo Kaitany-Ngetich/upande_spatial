@@ -217,7 +217,7 @@ function render_overview(frm) {
 			${card(__("Junction pressure (whole run)"), `${fmt(pMin)} – ${fmt(pMax)} m`, __("lowest – highest at any hour"))}
 			${card(__("Peak velocity"), `${fmt(vMax, 2)} m/s`, vMax > 2 ? __("above 2 m/s - check for surge / wear") : __("within the usual 0.5–2 m/s"))}
 			${card(__("Network"), `${data.node_count ?? junctions.length} / ${data.link_count ?? links.length}`, __("nodes / links simulated"))}
-			${card(__("Simulated"), `${fmt(st.duration_hours, 0)} h`, `${hours.length || 1} ${__("timesteps")} · ${st.headloss || "?"} · ${st.demand_model || "?"} · ${st.flow_units || ""}`)}
+			${card(__("Simulated"), `${fmt(st.duration_hours, 0)} h`, `${hours.length || 1} ${__("timesteps")} · ${st.headloss || "?"} · ${st.demand_model || "?"} · ${st.flow_units || ""}${st.source ? ` · ${__("computed in")} ${frappe.utils.escape_html(st.source)}` : ""}`)}
 		</div>
 		<div style="margin-bottom:16px">
 			<div style="font-weight:600;margin-bottom:6px">${__("Junctions by peak pressure")}</div>

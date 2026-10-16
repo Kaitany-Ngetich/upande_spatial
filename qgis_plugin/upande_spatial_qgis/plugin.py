@@ -24,7 +24,7 @@ from qgis.PyQt.QtWidgets import (
 from . import layers as L
 from . import mergin_sync as MS
 from .client import SessionExpired
-from .dialogs import LoginDialog, MerginExportDialog, PublishDialog
+from .dialogs import LoginDialog, MerginExportDialog, PublishDialog, UploadResultsDialog
 
 HERE = os.path.dirname(__file__)
 ROLE_KIND = Qt.ItemDataRole.UserRole
@@ -61,6 +61,7 @@ class UpandeSpatialPlugin:
 		self._action(None, "Force-push selected features", self.force_push_selected)
 		self._action(None, "Check out selected features", lambda: self.checkout_selected(True))
 		self._action(None, "Release selected features", lambda: self.checkout_selected(False))
+		self._action(None, "Upload Gusnet results to ERP…", self.upload_gusnet_results)
 		self._action(None, "Mergin Maps: export ERP layers to GeoPackage…", self.mergin_export)
 		self._action(None, "Mergin Maps: sync GeoPackage ⇄ ERP", self.mergin_sync)
 		QgsProject.instance().readProject.connect(self._reattach_project_layers)
@@ -488,6 +489,77 @@ class UpandeSpatialPlugin:
 		verb = "Checked out" if checkout else "Released"
 		self.msg(f"{verb} {len(writes)} feature(s)." + (f" {len(errors)} failed: " + "; ".join(errors[:3]) if errors else ""),
 			Qgis.MessageLevel.Success if not errors else Qgis.MessageLevel.Warning)
+
+	# ── QGIS (Gusnet) simulation results -> ERP ───────────────
+	@staticmethod
+	def _gusnet_result_layers():
+		"""Newest point layer with name + pressure, newest line layer with
+		name + velocity - Gusnet's Run Simulation outputs."""
+		from qgis.core import QgsVectorLayer, QgsWkbTypes
+
+		nodes = links = None
+		for lyr in QgsProject.instance().layerTreeRoot().findLayers():
+			vl = lyr.layer()
+			if not isinstance(vl, QgsVectorLayer) or L.is_erp_layer(vl):
+				continue
+			names = {f.name() for f in vl.fields()}
+			gtype = QgsWkbTypes.geometryType(vl.wkbType())
+			if nodes is None and gtype == QgsWkbTypes.GeometryType.PointGeometry and {"name", "pressure"} <= names:
+				nodes = vl
+			if links is None and gtype == QgsWkbTypes.GeometryType.LineGeometry and {"name", "velocity"} <= names:
+				links = vl
+		return nodes, links
+
+	@staticmethod
+	def _values(feature, field):
+		"""A Gusnet result attribute: a list (one value per timestep) or a number."""
+		v = L._py(feature[field]) if field in feature.fields().names() else None
+		if v is None:
+			return None
+		if isinstance(v, (list, tuple)):
+			return [L._py(x) for x in v]
+		return [v]
+
+	def upload_gusnet_results(self):
+		if not self.ensure_client():
+			return
+		try:
+			nets = self.erp(lambda c: c.catalog()).get("epanet_networks") or []
+		except Exception as e:
+			self.msg(f"Could not read ERP networks: {e}", Qgis.MessageLevel.Critical)
+			return
+		if not nets:
+			self.msg("ERP has no EPANET networks yet.", Qgis.MessageLevel.Warning)
+			return
+		try:
+			from qgis.core import QgsExpressionContextUtils
+
+			units = QgsExpressionContextUtils.projectScope(QgsProject.instance()).variable("gusnet_flow_unit")
+			units = str(getattr(units, "name", units) or "LPS").split(".")[-1]
+		except Exception:
+			units = "LPS"
+		dlg = UploadResultsDialog(nets, units, self.iface.mainWindow())
+		dlg.preselect(*self._gusnet_result_layers())
+		if not dlg.exec():
+			return
+		nodes_layer, links_layer = dlg.nodes.currentLayer(), dlg.links.currentLayer()
+		if nodes_layer is None or "name" not in nodes_layer.fields().names():
+			self.msg("Pick Gusnet's Nodes results layer (it has a 'name' field).", Qgis.MessageLevel.Warning)
+			return
+		nodes = {f["name"]: {k: self._values(f, k) for k in ("pressure", "head", "demand")} for f in nodes_layer.getFeatures() if f["name"]}
+		links = {}
+		if links_layer is not None and "name" in links_layer.fields().names():
+			links = {f["name"]: {"flow": self._values(f, "flowrate"), "velocity": self._values(f, "velocity")}
+				for f in links_layer.getFeatures() if f["name"]}
+		network = dlg.network.currentData()
+		try:
+			res = self.erp(lambda c: c.import_results(network, nodes, links, dlg.units.currentText(), dlg.note.text().strip() or None))
+		except Exception as e:
+			self.msg(f"Upload failed: {e}", Qgis.MessageLevel.Critical, 0)
+			return
+		self.msg(f"Saved in ERP as {res['run']}: {res['matched_nodes']} nodes, {res['matched_links']} links"
+			+ (f" ({res['skipped']} not in the network, skipped)" if res.get("skipped") else "")
+			+ ". Open it in ERP for the Overview and Plan inspection.", Qgis.MessageLevel.Success, 12)
 
 	# ── Mergin Maps ────────────────────────────────────────────
 	def _erp_gpkgs(self):

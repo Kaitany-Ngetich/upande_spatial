@@ -10,6 +10,7 @@
  "field_order": [
   "network",
   "status",
+  "source",
   "run_by",
   "run_on",
   "column_break_1",
@@ -133,6 +134,17 @@
    "fieldname": "results",
    "fieldtype": "Long Text",
    "label": "Results (JSON)",
+   "read_only": 1
+  },
+  {
+   "default": "ERP",
+   "description": "Where the hydraulics were computed. QGIS runs were uploaded from the Upande Spatial plugin.",
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Source",
+   "options": "ERP\nQGIS (Gusnet)",
    "read_only": 1
   }
  ],

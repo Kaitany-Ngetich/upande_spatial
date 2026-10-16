@@ -241,3 +241,54 @@ class MerginExportDialog(QDialog):
 	def entries(self):
 		return [self.layers.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.layers.count())
 			if self.layers.item(i).checkState() == Qt.CheckState.Checked]
+
+
+FLOW_UNITS = ["LPS", "LPM", "MLD", "CMH", "CMD", "CFS", "GPM", "MGD", "IMGD", "AFD"]
+
+
+class UploadResultsDialog(QDialog):
+	"""Pick the Gusnet result layers and the ERP network they belong to."""
+
+	def __init__(self, networks, flow_units="LPS", parent=None):
+		super().__init__(parent)
+		self.setWindowTitle("Upload Gusnet results to ERP")
+		form = QFormLayout()
+		self.network = QComboBox()
+		for n in networks:
+			self.network.addItem(n.get("network_name") or n.get("name"), n.get("name"))
+		form.addRow("ERP network", self.network)
+		self.nodes = QgsMapLayerComboBox(self)
+		self.nodes.setFilters(QgsMapLayerProxyModel.Filter.PointLayer)
+		form.addRow("Node results layer", self.nodes)
+		self.links = QgsMapLayerComboBox(self)
+		self.links.setFilters(QgsMapLayerProxyModel.Filter.LineLayer)
+		self.links.setAllowEmptyLayer(True)
+		form.addRow("Link results layer", self.links)
+		self.units = QComboBox()
+		self.units.addItems(FLOW_UNITS)
+		self.units.setCurrentIndex(max(self.units.findText((flow_units or "LPS").upper()), 0))
+		form.addRow("Flow units of the run", self.units)
+		self.note = QLineEdit()
+		self.note.setPlaceholderText("e.g. what-if: P-012 upsized to 110 mm")
+		form.addRow("Note", self.note)
+		hint = QLabel(
+			"Use the Nodes / Links layers Gusnet's Run Simulation created from the network's own .inp export "
+			"(Upande Spatial panel → EPANET results → .inp), so element names match ERP. The upload becomes a new "
+			"EPANET Simulation Run in ERP, marked as coming from QGIS."
+		)
+		hint.setWordWrap(True)
+		form.addRow(hint)
+		buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+		buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Upload")
+		buttons.accepted.connect(self.accept)
+		buttons.rejected.connect(self.reject)
+		layout = QVBoxLayout(self)
+		layout.addLayout(form)
+		layout.addWidget(buttons)
+		self.resize(520, 330)
+
+	def preselect(self, nodes_layer, links_layer):
+		if nodes_layer is not None:
+			self.nodes.setLayer(nodes_layer)
+		if links_layer is not None:
+			self.links.setLayer(links_layer)
